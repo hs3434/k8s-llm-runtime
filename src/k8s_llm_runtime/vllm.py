@@ -82,6 +82,11 @@ class VLLMInferenceOperator:
             "--set", f"replicaCount={replicas}",
             "--set", f"fullnameOverride={safe_name}",
         ]
+        # Optional extra helm flags via env var, e.g. for swapping to a
+        # mock image in CI: `VLLM_HELM_EXTRA_ARGS="-f /etc/mock/values.yaml"`
+        extra = os.environ.get("VLLM_HELM_EXTRA_ARGS", "").strip()
+        if extra:
+            args.extend(extra.split())
         self._run_helm(args)
         return self._wait_for_ready(safe_name, namespace, model_name, timeout=timeout)
 

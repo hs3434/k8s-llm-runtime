@@ -10,12 +10,19 @@ models:
     qwen-7b: Qwen/Qwen2.5-7B-Instruct
     qwen-0.5b: Qwen/Qwen2.5-0.5B-Instruct
   defaultGpu:
-    vendor: amd
+    # Default to `none` so the chart deploys on any cluster (CPU or
+    # any GPU vendor). AMD ROCm stays the primary target — flip via
+    # `--set models.defaultGpu.vendor=amd` for the AMD interview demo.
+    vendor: none
     limit: 1
   idleTimeoutSeconds: 600
   deployLockTtl: 600
 
 targetNamespace: llm-models
+
+# Optional extra helm args for `helm install` of vLLM releases. Used
+# for swapping to a mock image in CI; production leaves this empty.
+vllmHelmExtraArgs: ""
 
 service:
   type: ClusterIP

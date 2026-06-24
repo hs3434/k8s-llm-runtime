@@ -16,6 +16,7 @@ from k8s_llm_runtime.errors import (
     ModelAliasError,
     ModelNotFoundError,
     VLLMDeployError,
+    VLLMUndeployError,
 )
 from k8s_llm_runtime.lock import K8sLeaseLock
 from k8s_llm_runtime.types import GPUResource
@@ -165,10 +166,16 @@ class ModelOperator:
         return sorted(self._loaded)
 
     async def unload(self, alias: str) -> None:
-        if alias not in self._loaded:
-            return
+        # Don't trust per-replica _loaded — with multiple router pods,
+        # any pod might receive the DELETE. Helm is the cluster's source
+        # of truth. helm uninstall is idempotent (returns 1 if missing,
+        # which we also treat as success).
         safe_name = self.vllm_op.to_dns_label(alias)
-        self.vllm_op.undeploy(safe_name, self.namespace)
+        try:
+            self.vllm_op.undeploy(safe_name, self.namespace)
+        except VLLMUndeployError as exc:
+            if "not found" not in str(exc).lower():
+                raise
         self._loaded.discard(alias)
         self._last_used.pop(alias, None)
         _metrics.MODELS_LOADED.labels(model_alias=alias).set(0)

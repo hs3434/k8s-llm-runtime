@@ -10,6 +10,7 @@ from k8s_llm_runtime.errors import (
     ModelNotFoundError,
     VLLMDeployError,
     VLLMDeployTimeoutError,
+    VLLMUndeployError,
 )
 from k8s_llm_runtime.model import (
     ChatMessage,
@@ -206,5 +207,9 @@ def test_unload_calls_undeploy(op, mock_vllm_op):
 
 
 def test_unload_silent_when_not_loaded(op, mock_vllm_op):
+    # unload is now idempotent: it always calls helm uninstall (cluster
+    # is the source of truth, not per-replica _loaded). helm uninstall
+    # of a non-existent release returns "not found" which we swallow.
+    mock_vllm_op.undeploy.side_effect = VLLMUndeployError("release not found")
     asyncio.run(op.unload("not-loaded"))
-    mock_vllm_op.undeploy.assert_not_called()
+    mock_vllm_op.undeploy.assert_called_once_with("not-loaded", "llm-models")

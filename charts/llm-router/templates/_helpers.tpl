@@ -26,3 +26,7 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
 app.kubernetes.io/name: {{ include "llm-router.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
+
+{{- define "llm-router.chartSourceName" -}}
+{{- default (printf "%s-chart-source" (include "llm-router.fullname" .)) .Values.chartSourceNameOverride -}}
+{{- end }}

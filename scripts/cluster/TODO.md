@@ -101,3 +101,93 @@ All tests pass (`make test`: 21/21), `ruff check` clean, `mypy
 3. Add a `nodeSelector` for `amd.com/gpu` (or remove the
    auto-applied taint on the control-plane so the vLLM pod can
    land there)
+---
+
+# Mock vLLM for CPU-only CI — DONE (2026-06-25)
+
+To run the e2e demo without GPU hardware or the 5 GB `vllm/vllm-openai`
+image, `docker/mock-vllm/` ships a 225 MB FastAPI app that mimics
+OpenAI-compatible `/v1/chat/completions` (echoes the user's last
+message with a `[mock] ` prefix).
+
+## End-to-end cycle (verified on kind, 8 GB nodes, no GPU)
+
+```
+1. fresh /v1/models                          → []
+2. POST /v1/chat/completions                 → 2.4s, mock echo
+3. helm list -n llm-models                   → qwen-0-5b deployed
+4. pod qwen-0-5b-...                         → 1/1 Running
+5. second chat                               → 130ms (cached)
+6. DELETE /v1/models/qwen-0.5b               → 204
+7. helm list -n llm-models after DELETE      → empty
+8. pods after DELETE                         → none
+```
+
+## How to use
+
+```bash
+# Build the mock image (one-time)
+docker build -t mock-vllm:demo docker/mock-vllm/
+
+# Load into kind
+for node in $(kind get nodes); do
+  docker save mock-vllm:demo | docker exec -i "$node" \
+    ctr -n k8s.io images import --snapshotter=overlayfs -
+done
+
+# Install llm-router pointing helm at the mock values file
+helm install llm-router ./charts/llm-router \
+    --namespace llm-system --create-namespace \
+    --set image.repository=router,image.tag=demo \
+    --set vllmHelmExtraArgs="-f /etc/vllm-extra/values-mock.yaml"
+
+# Pack mock values into a ConfigMap so the router can mount it
+kubectl -n llm-system create configmap llm-router-vllm-extra \
+    --from-file=docker/mock-vllm/values-mock.yaml
+```
+
+The mock values file overrides the chart's `image.repository` from
+`vllm/vllm-openai` to `mock-vllm`. The mock image's `entrypoint.sh`
+parses and discards `--model` / `--port` args that the chart passes.
+
+## Defaults
+
+- `charts/llm-router/values.yaml` — `models.defaultGpu.vendor` is
+  `none` (was `amd`) so the chart deploys on any cluster. AMD ROCm
+  is the AMD-interview target; flip via
+  `--set models.defaultGpu.vendor=amd`.
+- `examples/vllm_qwen/server.py` — `GPU_VENDOR` env default is
+  `none` (was `amd`). Same override applies.
+- `charts/llm-inference/values.yaml` — resources lowered from
+  8Gi/16Gi to 2Gi/4Gi so the vLLM pod fits on kind workers. Real
+  AMD/CUDA deployments should override.
+
+## What was added
+
+- `docker/mock-vllm/{Dockerfile,entrypoint.sh,server.py,values-mock.yaml}`
+  — mock OpenAI-compatible server + Helm values override
+- `charts/llm-router/templates/_helpers.tpl` — `llm-router.chartSourceName`
+  helper (used by deployment.yaml for the chart-source ConfigMap)
+- `charts/llm-router/templates/deployment.yaml` — env var
+  `VLLM_HELM_EXTRA_ARGS` and optional `vllm-helm-extra` ConfigMap
+  volume
+- `charts/llm-router/values.yaml` — `vllmHelmExtraArgs` setting
+- `src/k8s_llm_runtime/vllm.py` — `VLLMInferenceOperator` reads
+  `VLLM_HELM_EXTRA_ARGS` and appends to the helm install args
+- `src/k8s_llm_runtime/model.py` — `unload` is now idempotent: it
+  always calls `helm uninstall` (cluster is the source of truth,
+  not per-replica `_loaded`) and swallows "not found" errors
+- Tests updated for the new behavior
+
+## Caveats
+
+- `mock-vllm` is for orchestration testing only. It does not run any
+  real model. The chart's resource limits + GPU settings still
+  apply — set `gpu.vendor=amd` + real ROCm nodeSelector for an
+  actual interview demo.
+- The router has 2 replicas and each keeps its own `_loaded` set.
+  `list_models()` may return stale info on a different replica than
+  the one that ran the chat. The cluster state (helm release) is
+  always correct, and `unload` is now idempotent so DELETE works
+  from any replica. A shared state (CRD or external store) is the
+  real fix for `list_models` accuracy.

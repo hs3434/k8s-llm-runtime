@@ -63,7 +63,10 @@ async def lifespan(app: FastAPI):
         vllm_op=vllm_op,
         namespace=os.environ.get("TARGET_NAMESPACE", "llm-models"),
         default_gpu=GPUResource(
-            vendor=GPUVendor(os.environ.get("GPU_VENDOR", "amd")),
+            # Default to `none` so the example runs on plain kind/MiniKube
+            # without GPU hardware. Set GPU_VENDOR=amd for the AMD ROCm
+            # demo, =nvidia for CUDA, etc.
+            vendor=GPUVendor(os.environ.get("GPU_VENDOR", "none")),
             limit=int(os.environ.get("GPU_LIMIT", "1")),
         ),
         idle_timeout_seconds=int(os.environ.get("IDLE_TIMEOUT", "600")),

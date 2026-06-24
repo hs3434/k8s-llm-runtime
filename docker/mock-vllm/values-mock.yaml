@@ -1,0 +1,9 @@
+# Override values for testing the chart with the mock-vllm image instead
+# of the real vllm/vllm-openai. Use:
+#   helm install X charts/llm-inference -f docker/mock-vllm/values-mock.yaml
+# Real vLLM is selected by default — this file is for CPU-only CI / dev
+# where the 5 GB vllm image can't be pulled.
+image:
+  repository: mock-vllm
+  tag: demo
+  pullPolicy: IfNotPresent
