@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
 # scripts/cluster/common.sh — shared shell functions for cluster setup
+#
+# Requires: kind, kubectl (install via scripts/cluster/install-prereqs.sh)
 set -euo pipefail
+
+if ! command -v kubectl >/dev/null 2>&1; then
+    echo "ERROR: kubectl not found. Run scripts/cluster/install-prereqs.sh first." >&2
+    exit 1
+fi
 
 export KUBECONFIG="${KUBECONFIG:-./kubeconfig}"
 export CLUSTER_NAME="${CLUSTER_NAME:-k8s-llm-demo}"
@@ -20,7 +27,7 @@ install_ingress_nginx() {
     kubectl wait --namespace ingress-nginx \
         --for=condition=ready pod \
         --selector=app.kubernetes.io/component=controller \
-        --timeout=120s
+        --timeout=300s
 }
 
 install_metrics_server() {
