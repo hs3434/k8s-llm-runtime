@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import functools
 import logging
+from collections.abc import Callable
+from typing import ParamSpec, TypeVar
 
 from kubernetes.client.rest import ApiException
 from tenacity import (
@@ -15,6 +17,9 @@ from tenacity import (
 
 logger = logging.getLogger(__name__)
 
+P = ParamSpec("P")
+R = TypeVar("R")
+
 
 def _is_transient(exc: BaseException) -> bool:
     """Return True if the ApiException is retryable (5xx or 429)."""
@@ -23,10 +28,10 @@ def _is_transient(exc: BaseException) -> bool:
     return isinstance(exc, (TimeoutError, ConnectionError))
 
 
-def k8s_retry(fn):
+def k8s_retry(fn: Callable[P, R]) -> Callable[P, R]:
     """Decorator: retry transient K8s API errors with exponential backoff."""
     @functools.wraps(fn)
-    def wrapper(*args, **kwargs):
+    def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
         return Retrying(
             stop=stop_after_attempt(5),
             wait=wait_exponential(multiplier=1, min=1, max=30),
