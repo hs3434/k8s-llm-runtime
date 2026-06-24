@@ -1,0 +1,56 @@
+[project]
+name = "k8s-llm-runtime"
+version = "0.1.0"
+description = "Kubernetes-based vLLM model serving router"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "bio-24" }]
+dependencies = [
+    "kubernetes>=29.0.0",
+    "pydantic>=2.6.0",
+    "structlog>=24.1.0",
+    "prometheus-client>=0.20.0",
+    "tenacity>=8.2.0",
+    "httpx>=0.27.0",
+    "pyyaml>=6.0",
+    "fastapi>=0.110.0",
+    "uvicorn[standard]>=0.27.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "pytest-mock>=3.12.0",
+    "pytest-cov>=4.1.0",
+    "respx>=0.21.0",
+    "ruff>=0.3.0",
+    "mypy>=1.8.0",
+    "openai>=1.30.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/k8s_llm_runtime"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "N", "ASYNC"]
+ignore = ["E501"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+files = ["src/k8s_llm_runtime"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests/unit", "tests/chart"]
+addopts = "-v --tb=short"
