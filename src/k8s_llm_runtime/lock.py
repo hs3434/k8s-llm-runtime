@@ -6,7 +6,7 @@ import os
 import socket
 import time
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Optional
 
 from kubernetes import client
@@ -39,7 +39,7 @@ class K8sLeaseLock:
         self._holder = _hostname()
         self._held = False
 
-    async def __aenter__(self) -> "K8sLeaseLock":
+    async def __aenter__(self) -> K8sLeaseLock:
         await self.acquire()
         return self
 
@@ -100,7 +100,7 @@ class K8sLeaseLock:
         return elapsed > self.ttl
 
     def _build_lease(self) -> client.V1Lease:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         return client.V1Lease(
             api_version="coordination.k8s.io/v1",
             kind="Lease",
