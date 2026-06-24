@@ -69,6 +69,11 @@ async def lifespan(app: FastAPI):
         idle_timeout_seconds=int(os.environ.get("IDLE_TIMEOUT", "600")),
     )
     app.state.op = op
+    try:
+        await op.discover_existing()
+        logger.info("discovered_existing_models", count=len(await op.list_models()))
+    except Exception:
+        logger.warning("discover_existing_failed", message="K8s may not be ready")
     logger.info("router_started", aliases=list(aliases.keys()))
     yield
     logger.info("router_stopping")
