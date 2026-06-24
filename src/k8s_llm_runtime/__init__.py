@@ -10,6 +10,7 @@ from k8s_llm_runtime.types import (
     JobStatus,
     ResourceSpec,
 )
+from k8s_llm_runtime.vllm import VLLMDeployment, VLLMInferenceOperator
 
 __version__ = "0.1.0"
 
@@ -23,4 +24,6 @@ __all__ = [
     "K8sJobOperator",
     "K8sLLMRuntimeError",
     "ResourceSpec",
+    "VLLMDeployment",
+    "VLLMInferenceOperator",
 ]
