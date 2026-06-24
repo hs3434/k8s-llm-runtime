@@ -27,8 +27,8 @@ venv/
 env/
 ENV/
 
-# uv
-uv.lock
+# uv (uv.lock IS tracked for application reproducibility)
+# uv.lock
 
 # Testing
 .pytest_cache/
