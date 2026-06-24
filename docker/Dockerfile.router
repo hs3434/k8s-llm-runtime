@@ -2,10 +2,10 @@
 FROM python:3.11-slim AS builder
 WORKDIR /build
 
-# uv binary pre-staged in docker/build-context/ (pypi.org isn't reachable
-# from build containers in restricted networks).
-COPY docker/build-context/uv /usr/local/bin/uv
-RUN chmod +x /usr/local/bin/uv && uv --version
+# Install uv from a Chinese PyPI mirror. Override with PIP_INDEX_URL
+# build-arg to use a different mirror in CI.
+ARG PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
+RUN pip install --no-cache-dir "${PIP_INDEX_URL}uv"
 
 COPY pyproject.toml uv.lock* ./
 RUN if [ -f uv.lock ]; then \
@@ -13,22 +13,27 @@ RUN if [ -f uv.lock ]; then \
     else \
       uv pip compile pyproject.toml -o requirements.txt; \
     fi
-# Use a Chinese PyPI mirror for installs since pypi.org often times out
-RUN sed -i 's|https://pypi.org/simple|https://pypi.tuna.tsinghua.edu.cn/simple|g' \
-    requirements.txt && \
+# Rewrite the locked index URL to the mirror
+RUN sed -i "s|https://pypi.org/simple|${PIP_INDEX_URL}|g" requirements.txt && \
     uv pip install --system --no-cache -r requirements.txt
 
 # --- Stage 2: runtime ---
 FROM python:3.11-slim AS runtime
 
-# Helm CLI — tarball pre-staged in docker/build-context/ (mirrors of
-# get.helm.sh aren't always reachable from build containers).
-COPY docker/build-context/helm-v3.14.0-linux-amd64.tar.gz /tmp/helm.tgz
-RUN apt-get update && apt-get install -y --no-install-recommends \
-        ca-certificates bash && \
-    tar -xz -C /tmp -f /tmp/helm.tgz && \
-    mv /tmp/linux-amd64/helm /usr/local/bin/helm && \
-    rm -rf /tmp/linux-amd64 /tmp/helm.tgz /var/lib/apt/lists/* && \
+# Helm CLI: install from Debian's apt repos. Override APT_MIRROR to use
+# a faster mirror; the default works in environments with direct access
+# to deb.debian.org. Restricted networks should set APT_MIRROR to e.g.
+# https://mirrors.tuna.tsinghua.edu.cn/debian
+ARG APT_MIRROR=
+RUN if [ -n "${APT_MIRROR}" ]; then \
+      sed -i "s|http://deb.debian.org/debian|${APT_MIRROR}|g; \
+              s|http://deb.debian.org/debian-security|${APT_MIRROR}-security|g; \
+              s|http://security.debian.org/debian-security|${APT_MIRROR}-security|g" \
+          /etc/apt/sources.list.d/debian.sources; \
+    fi && \
+    apt-get update && apt-get install -y --no-install-recommends \
+        ca-certificates bash helm curl && \
+    rm -rf /var/lib/apt/lists/* && \
     helm version --short
 
 # App code
