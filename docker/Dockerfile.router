@@ -1,0 +1,46 @@
+# --- Stage 1: build Python deps ---
+FROM python:3.11-slim AS builder
+WORKDIR /build
+RUN pip install --no-cache-dir uv
+
+COPY pyproject.toml uv.lock* ./
+RUN if [ -f uv.lock ]; then \
+      uv export --frozen --no-dev --no-emit-project -o requirements.txt; \
+    else \
+      uv pip compile pyproject.toml -o requirements.txt; \
+    fi
+RUN uv pip install --system --no-cache -r requirements.txt
+
+# --- Stage 2: runtime ---
+FROM python:3.11-slim AS runtime
+
+# Helm CLI
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        curl ca-certificates bash && \
+    curl -fsSL https://get.helm.sh/helm-v3.14.0-linux-amd64.tar.gz \
+        | tar -xz -C /tmp && \
+    mv /tmp/linux-amd64/helm /usr/local/bin/helm && \
+    rm -rf /tmp/linux-amd64 /var/lib/apt/lists/* && \
+    helm version --short
+
+# App code
+WORKDIR /app
+COPY charts/ /chart-source/
+COPY src/k8s_llm_runtime/ /app/src/k8s_llm_runtime/
+COPY examples/vllm_qwen/server.py /app/server.py
+
+# Python deps from builder
+COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
+COPY --from=builder /usr/local/bin /usr/local/bin
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONPATH=/app/src \
+    MODEL_CONFIG_PATH=/app/config/models.yaml \
+    CHART_PATH=/app/charts/llm-inference
+
+EXPOSE 8080
+
+USER 1000
+
+CMD ["uvicorn", "server:app", "--host", "0.0.0.0", "--port", "8080", "--workers", "2"]
