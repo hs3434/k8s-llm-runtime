@@ -1,0 +1,9 @@
+{
+  "model": "qwen-0.5b",
+  "messages": [
+    {"role": "system", "content": "你是一个简洁的助手，回答不超过 50 字。"},
+    {"role": "user", "content": "用一句话介绍 Kubernetes"}
+  ],
+  "temperature": 0.7,
+  "max_tokens": 100
+}

@@ -129,7 +129,7 @@ async def readyz():
         from k8s_llm_runtime import _client
         _client.core_api().list_namespace(limit=1)
     except Exception as exc:
-        raise HTTPException(503, f"K8s API unreachable: {exc}")
+        raise HTTPException(503, f"K8s API unreachable: {exc}") from exc
     return {"status": "ready"}
 
 
