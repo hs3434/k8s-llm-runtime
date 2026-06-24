@@ -25,7 +25,7 @@ helm install llm-router ./charts/llm-router -n llm-system --create-namespace --w
 kubectl -n llm-system port-forward svc/llm-router 8080:8080 &
 
 # 4. 调推理（首次会自动部署模型）
-python examples/vllm-qwen/client.py --prompt "Hello"
+python examples/vllm_qwen/client.py --prompt "Hello"
 ```
 
 ## 文档
