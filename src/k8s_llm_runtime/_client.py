@@ -13,6 +13,7 @@ from kubernetes.config import ConfigException
 
 _batch_api: Optional[client.BatchV1Api] = None
 _core_api: Optional[client.CoreV1Api] = None
+_coordination_api: Optional[client.CoordinationV1Api] = None
 _config_loaded: bool = False
 
 
@@ -51,3 +52,12 @@ def core_api() -> client.CoreV1Api:
         load_config()
         _core_api = client.CoreV1Api()
     return _core_api
+
+
+def coordination_api() -> client.CoordinationV1Api:
+    """Lazy-initialize and return the CoordinationV1Api client."""
+    global _coordination_api
+    if _coordination_api is None:
+        load_config()
+        _coordination_api = client.CoordinationV1Api()
+    return _coordination_api
