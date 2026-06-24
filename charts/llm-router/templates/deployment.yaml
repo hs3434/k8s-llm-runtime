@@ -80,7 +80,8 @@ spec:
             - -c
             - |
               mkdir -p /app/charts/llm-inference && \
-              cp -r /chart-source/. /app/charts/llm-inference/ && \
+              tar -xzf /chart-source/chart --strip-components=1 \
+                -C /app/charts/llm-inference && \
               ls /app/charts/llm-inference/
           volumeMounts:
             - name: chart-source

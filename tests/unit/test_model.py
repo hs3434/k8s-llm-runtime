@@ -17,13 +17,14 @@ from k8s_llm_runtime.model import (
     ModelOperator,
 )
 from k8s_llm_runtime.types import GPUResource, GPUVendor
-from k8s_llm_runtime.vllm import VLLMDeployment
+from k8s_llm_runtime.vllm import VLLMDeployment, VLLMInferenceOperator
 
 
 @pytest.fixture
 def mock_vllm_op():
     op = MagicMock()
     op.get_endpoint.return_value = "http://qwen.llm-models.svc.cluster.local:8000"
+    op.to_dns_label = VLLMInferenceOperator.to_dns_label
     op.get_status.return_value = VLLMDeployment(
         release_name="qwen",
         namespace="llm-models",
@@ -200,7 +201,7 @@ def test_list_models_returns_loaded(op):
 def test_unload_calls_undeploy(op, mock_vllm_op):
     op._loaded.add("qwen-0.5b")
     asyncio.run(op.unload("qwen-0.5b"))
-    mock_vllm_op.undeploy.assert_called_once_with("qwen-0.5b", "llm-models")
+    mock_vllm_op.undeploy.assert_called_once_with("qwen-0-5b", "llm-models")
     assert "qwen-0.5b" not in op._loaded
 
 

@@ -6,8 +6,9 @@ def test_default_values_render(helm_template):
     assert "kind: Deployment" in manifest
     assert "kind: Service" in manifest
     assert "kind: ServiceAccount" in manifest
-    assert "kind: Role" in manifest
-    assert "kind: RoleBinding" in manifest
+    # Cluster-scoped RBAC: models deploy to a different namespace
+    assert "kind: ClusterRole" in manifest
+    assert "kind: ClusterRoleBinding" in manifest
     assert "kind: ConfigMap" in manifest
 
 

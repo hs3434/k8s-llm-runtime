@@ -1,16 +1,22 @@
 apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
+kind: ClusterRole
 metadata:
   name: {{ include "llm-router.fullname" . }}
   labels:
     {{- include "llm-router.labels" . | nindent 4 }}
 rules:
+  # Models live in {{ .Values.targetNamespace }} (different from this chart's namespace),
+  # so the router needs cluster-wide access for Deployments/Services/Pods/Leases.
   - apiGroups: ["apps"]
     resources: ["deployments", "replicasets"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
   - apiGroups: [""]
-    resources: ["services", "pods", "configmaps"]
-    verbs: ["get", "list", "watch"]
+    resources: ["namespaces", "services", "pods", "configmaps", "serviceaccounts"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  # Helm stores release metadata as Secrets — needed to install/upgrade/list releases
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
   - apiGroups: ["coordination.k8s.io"]
     resources: ["leases"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]

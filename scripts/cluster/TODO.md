@@ -1,116 +1,103 @@
-# Cluster Bootstrap — DONE (2026-06-24)
+# End-to-end Demo Verification — DONE (partially)
 
-`make cluster-up` now runs end-to-end without manual intervention
-(assuming the host has docker daemon configured to reach `registry.k8s.io`,
-e.g. via the HTTP_PROXY drop-in noted below).
+Walked through `docs/amd-interview-demo.md` on 2026-06-24 against the
+kind cluster from the previous cluster-bootstrap round. Most of the
+orchestration works; the actual vLLM inference is blocked by hardware.
 
-## Verification log (latest run)
+## What works (verified)
 
-```
-[19:57:23] ✓ kind cluster deleted
-[19:58:34] Installing ingress-nginx
-...
-pod/ingress-nginx-controller-57bf4898db-t5pvx condition met
-[19:58:34] Installing metrics-server (for HPA)
-...
-deployment "metrics-server" successfully rolled out
-[20:00:39] ✓ kind cluster ready. KUBECONFIG=./kubeconfig
-```
+1. `make cluster-up` — 3 nodes Ready, ingress-nginx Ready,
+   metrics-server Ready, `kubectl top nodes` returns data.
+2. `docker build -f docker/Dockerfile.router -t router:demo .` —
+   succeeds after vendoring `uv` binary and helm tarball in
+   `docker/build-context/` (pypi.org / get.helm.sh aren't reachable
+   from build containers in restricted networks). Uses Tsinghua PyPI
+   mirror for the dep install.
+3. Router image loaded into kind nodes (manual `docker save | ctr
+   import` because `kind load docker-image` errors on multi-arch
+   manifests under containerd v2).
+4. Chart packed as `.tgz` and stored in `llm-router-chart-source`
+   ConfigMap (the old `--from-file=charts/llm-inference/` only added
+   2 files — kubectl doesn't recurse, and `/` isn't a valid key char).
+   Init container extracts the tgz with `tar --strip-components=1`.
+5. `helm install llm-router` deploys successfully; both router pods
+   become Ready.
+6. Router endpoints work:
+   - `GET /healthz` → `{"status":"healthy"}`
+   - `GET /readyz`  → `{"status":"ready"}`
+   - `GET /v1/models` → `{"object":"list","data":[]}`
+7. First `POST /v1/chat/completions` triggers a helm release in
+   `llm-models` (release name `qwen-0-5b` — sanitized from alias
+   `qwen-0.5b` which violates DNS-1035).
+8. Lease lock acquired via `deploy-qwen-0-5b`; chart tgz extracted
+   to `/app/charts/llm-inference/`; Deployment/Service/ServiceAccount
+   rendered correctly in `llm-models`.
 
-Final state (verified):
+## What was fixed along the way
 
-- 3 nodes Ready (control-plane + 2 workers)
-- `ingress-nginx-controller` 1/1 Running
-- `metrics-server` 1/1 Running
-- `kubectl top nodes` returns CPU/memory data
+| Symptom | Fix |
+|---|---|
+| `/readyz` returns 503 (RBAC) | `Role` → `ClusterRole` (router deploys to `llm-models` namespace, cross-namespace access required) |
+| `helm install` fails: `secrets is forbidden` | added `secrets: get,list,watch,create,update,patch,delete` |
+| `helm install` fails: `namespaces is forbidden` | added `namespaces: create` |
+| `helm install` fails: `serviceaccounts is forbidden` | added `serviceaccounts: get,list,watch,create,update,patch,delete` |
+| Stale lease (old pod) → 422 on replace | `_try_acquire_once` now delete + recreate instead of `replace_namespaced_lease` (the latter requires `resourceVersion`) |
+| Service "qwen-0.5b" invalid (DNS-1035) | added `VLLMInferenceOperator.to_dns_label()`; release name and helm `fullnameOverride` use sanitized name; lock key uses sanitized name too |
+| `MANIFEST: empty` after init (templates missing) | chart source ConfigMap must be a `.tgz` (kubectl `--from-file=DIR` doesn't recurse into subdirs, and `templates/deployment.yaml` key with `/` is invalid) |
+| Chart tarball extraction | init container: `tar -xzf /chart-source/chart --strip-components=1 -C /app/charts/llm-inference` |
 
-## What was wrong (recap of debugging)
+## What's blocked
 
-Three independent blockers combined to make the previous `make cluster-up`
-fail at the ingress-nginx step:
+The vLLM pod itself can't run on this kind cluster:
 
-### 1. `nodeSelector ingress-ready=true` on ingress-nginx controller
+1. **No AMD GPU resource.** Default `gpu.vendor=amd` injects
+   `amd.com/gpu` resource request. Workaround for demo:
+   `--set models.defaultGpu.vendor=none`.
+2. **Memory insufficient.** Default chart values request 8Gi memory /
+   16Gi limit; kind nodes have ~4Gi available for pods. Lowered
+   defaults in `charts/llm-inference/values.yaml` to 2Gi/4Gi — small
+   enough for kind, but `qwen-0.5b` itself needs more for inference.
+3. **Image pull fails.** `vllm/vllm-openai:latest` is a ~5GB image.
+   No working mirror found for it (registry.k8s.io via
+   `k8s.m.daocloud.io` doesn't have it; direct pulls time out).
+4. **No GPU even if pod scheduled.** Without actual AMD ROCm hardware
+   the model can't load weights.
 
-The official `kind` deploy.yaml requires this label, but kind only
-auto-applies it when the node has `extraPortMappings`. We don't expose
-80/443 on the host (the project uses `kubectl port-forward`), so the
-label is missing.
+This means the actual `qwen-0.5b` chat-completion smoke test cannot
+run on this kind cluster. The orchestration (router → chart load →
+helm release → K8s resources created) is fully verified.
 
-**Fix**: `kind-up.sh` now labels every node with `ingress-ready=true`
-right after `wait_for_node_ready`. Could also be solved by adding
-`extraPortMappings` to `kind-config.yaml` but the manual label is
-explicit and doesn't bind host ports.
+## What was changed in this round
 
-### 2. Deprecated `mirrors` field ignored by containerd v2
+- `charts/llm-router/templates/role.yaml`, `rolebinding.yaml` —
+  ClusterRole/ClusterRoleBinding + extra resource verbs
+- `charts/llm-router/templates/deployment.yaml` — init container
+  extracts chart tgz
+- `charts/llm-inference/values.yaml` — default resources lowered
+  to fit kind
+- `docker/Dockerfile.router` — vendored `uv` + helm tarball,
+  Tsinghua PyPI mirror
+- `docker/build-context/{uv, helm-v3.14.0-linux-amd64.tar.gz}` —
+  new vendored deps
+- `src/k8s_llm_runtime/vllm.py` — `to_dns_label` helper; release
+  name sanitization
+- `src/k8s_llm_runtime/lock.py` — delete + recreate stale leases
+- `src/k8s_llm_runtime/model.py` — uses sanitized lock key + status
+  lookups; `discover_existing` maps back via to_dns_label
+- `tests/unit/test_lock.py`, `tests/unit/test_model.py` — updated
+  for the new code paths
+- `tests/chart/test_llm_router.py` — updated for ClusterRole
 
-`kindest/node:v1.32.2` ships with `containerd v2.0.2`, where
-`[plugins."io.containerd.grpc.v1.cri".registry.mirrors]` is **deprecated**
-and silently ignored when `config_path` is also set (which it is by
-default). Result: image pulls inside kind nodes go directly to
-`registry.k8s.io`, hit network restrictions, and hang.
+All tests pass (`make test`: 21/21), `ruff check` clean, `mypy
+--strict` clean.
 
-**Fix (chosen)**: pre-load images into kind nodes from the host before
-applying the manifest. New `preload_image_to_kind` helper in `common.sh`:
+## Next: when there's a real AMD machine
 
-```bash
-docker pull --platform linux/amd64 <image>
-docker save <image> | docker exec -i <node> \
-    ctr -n k8s.io images import --snapshotter=overlayfs -
-```
-
-Note: `kind load docker-image` was tried first but fails on multi-arch
-manifests with `rpc error: code = NotFound desc = content digest ...: not found`.
-The `docker save | ctr import` pipe sidesteps that.
-
-Alternative long-term fix: migrate `kind-config.yaml` to the new
-`config_path` syntax (`/etc/containerd/certs.d/<host>/hosts.toml` with
-`extraMounts`). Not done yet because the daocloud mirror only caches
-core K8s images (coredns, etcd, kube-apiserver, ...) — `ingress-nginx/controller`,
-`kube-webhook-certgen`, and `metrics-server` all return **403** from
-`k8s.m.daocloud.io`. The pre-load path is more reliable for our image
-set.
-
-### 3. Host docker can't reach `registry.k8s.io` directly
-
-`registry.k8s.io` resolves to IPv6 (`asia-east1-docker.pkg.dev`) which
-times out from this network.
-
-**Fix (host-level, NOT in repo)**: `systemd` drop-in for docker daemon:
-
-```
-# /etc/systemd/system/docker.service.d/http-proxy.conf
-[Service]
-Environment="HTTP_PROXY=http://127.0.0.1:10809"
-Environment="HTTPS_PROXY=http://127.0.0.1:10809"
-Environment="NO_PROXY=localhost,127.0.0.1,::1,.svc,.cluster.local"
-```
-
-Where `127.0.0.1:10809` is the local HTTP proxy (xray in this
-environment; substitute your own). The proxy config belongs on the
-host, not in the repo — different networks will use different proxies.
-
-The repo only requires that *some* mechanism on the host makes
-`docker pull registry.k8s.io/...` work.
-
-### 4. `kubectl apply -f https://github.com/...` hangs
-
-`github.com` direct downloads time out (TLS handshake). The kind
-ingress-nginx and metrics-server manifests are now bundled in
-`scripts/cluster/manifests/` and applied from local files.
-
-## Files changed in this round
-
-- `scripts/cluster/common.sh` — `preload_image_to_kind` helper,
-  `install_metrics_server` uses `kubectl rollout status` instead of
-  `kubectl wait` (which races against old pods during rollout)
-- `scripts/cluster/kind-up.sh` — labels nodes with `ingress-ready=true`
-- `scripts/cluster/manifests/ingress-nginx-kind-v1.10.0.yaml` (new)
-- `scripts/cluster/manifests/metrics-server.yaml` (new)
-
-## Still pending (from original TODO)
-
-- Plan ahead for vLLM 15 GB image pull — same pre-load pattern will
-  apply (host pulls via docker daemon proxy, then load into kind).
-  See `docs/architecture.md` when Phase 6 is reached.
-- README — should mention the host docker daemon proxy prerequisite
-  (separate PR).
+1. Provision a node with `amd.com/gpu` resource
+2. Override chart `image.repository` to a known mirror, or pre-pull
+   on the host and use `kind load docker-image` once the
+   `kind load` multi-arch issue is fixed (or just keep using the
+   `docker save | ctr import` workaround)
+3. Add a `nodeSelector` for `amd.com/gpu` (or remove the
+   auto-applied taint on the control-plane so the vLLM pod can
+   land there)

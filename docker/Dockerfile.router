@@ -1,7 +1,11 @@
 # --- Stage 1: build Python deps ---
 FROM python:3.11-slim AS builder
 WORKDIR /build
-RUN pip install --no-cache-dir uv
+
+# uv binary pre-staged in docker/build-context/ (pypi.org isn't reachable
+# from build containers in restricted networks).
+COPY docker/build-context/uv /usr/local/bin/uv
+RUN chmod +x /usr/local/bin/uv && uv --version
 
 COPY pyproject.toml uv.lock* ./
 RUN if [ -f uv.lock ]; then \
@@ -9,18 +13,22 @@ RUN if [ -f uv.lock ]; then \
     else \
       uv pip compile pyproject.toml -o requirements.txt; \
     fi
-RUN uv pip install --system --no-cache -r requirements.txt
+# Use a Chinese PyPI mirror for installs since pypi.org often times out
+RUN sed -i 's|https://pypi.org/simple|https://pypi.tuna.tsinghua.edu.cn/simple|g' \
+    requirements.txt && \
+    uv pip install --system --no-cache -r requirements.txt
 
 # --- Stage 2: runtime ---
 FROM python:3.11-slim AS runtime
 
-# Helm CLI
+# Helm CLI — tarball pre-staged in docker/build-context/ (mirrors of
+# get.helm.sh aren't always reachable from build containers).
+COPY docker/build-context/helm-v3.14.0-linux-amd64.tar.gz /tmp/helm.tgz
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        curl ca-certificates bash && \
-    curl -fsSL https://get.helm.sh/helm-v3.14.0-linux-amd64.tar.gz \
-        | tar -xz -C /tmp && \
+        ca-certificates bash && \
+    tar -xz -C /tmp -f /tmp/helm.tgz && \
     mv /tmp/linux-amd64/helm /usr/local/bin/helm && \
-    rm -rf /tmp/linux-amd64 /var/lib/apt/lists/* && \
+    rm -rf /tmp/linux-amd64 /tmp/helm.tgz /var/lib/apt/lists/* && \
     helm version --short
 
 # App code

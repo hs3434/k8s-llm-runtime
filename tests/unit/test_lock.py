@@ -47,7 +47,8 @@ def test_acquire_replaces_expired_lease(mock_coord_api):
     mock_lease = MagicMock()
     mock_lease.spec = _make_spec(holder="other-pod", acquired_at=0)
     mock_coord_api.read_namespaced_lease.return_value = mock_lease
-    mock_coord_api.replace_namespaced_lease.return_value = None
+    mock_coord_api.delete_namespaced_lease.return_value = None
+    mock_coord_api.create_namespaced_lease.return_value = None
     lock = K8sLeaseLock(key="deploy-qwen", namespace="ns", ttl=60)
 
     with (
@@ -59,7 +60,9 @@ def test_acquire_replaces_expired_lease(mock_coord_api):
     ):
         asyncio.run(lock.acquire())
 
-    mock_coord_api.replace_namespaced_lease.assert_called_once()
+    # Stale lease is replaced by delete + create (replace requires resourceVersion)
+    mock_coord_api.delete_namespaced_lease.assert_called_once()
+    mock_coord_api.create_namespaced_lease.assert_called_once()
 
 
 def test_acquire_raises_when_held_by_other(mock_coord_api):

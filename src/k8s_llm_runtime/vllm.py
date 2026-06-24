@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import time
 from dataclasses import dataclass
@@ -42,6 +43,21 @@ class VLLMInferenceOperator:
         self.chart_path = chart_path
         self.kubeconfig = kubeconfig
 
+    @staticmethod
+    def to_dns_label(s: str) -> str:
+        """Map a user-supplied alias (may contain dots) to a DNS-1035 label.
+
+        Rules: lowercase, alphanumeric and '-', must start with a letter,
+        must end with an alphanumeric character.
+        """
+        out = re.sub(r"[^a-z0-9-]", "-", s.lower())
+        out = re.sub(r"-+", "-", out).strip("-")
+        if not out or not out[0].isalpha():
+            out = "m-" + out
+        if not out[-1].isalnum():
+            out = out.rstrip("-") + "0"
+        return out[:53]  # K8s label max length is 63
+
     def deploy(
         self,
         release_name: str,
@@ -54,18 +70,20 @@ class VLLMInferenceOperator:
         """Helm install/upgrade vLLM with the given model. Idempotent."""
         if gpu is None:
             gpu = GPUResource()
+        safe_name = self.to_dns_label(release_name)
         args = [
-            "helm", "upgrade", "--install", release_name, self.chart_path,
+            "helm", "upgrade", "--install", safe_name, self.chart_path,
             "--namespace", namespace, "--create-namespace",
             "--wait", "--timeout", f"{timeout}s",
             "--set", f"model.name={model_name}",
+            "--set", f"model.alias={release_name}",
             "--set", f"gpu.vendor={gpu.vendor.value}",
             "--set", f"gpu.limit={gpu.limit}",
             "--set", f"replicaCount={replicas}",
-            "--set", f"fullnameOverride={release_name}",
+            "--set", f"fullnameOverride={safe_name}",
         ]
         self._run_helm(args)
-        return self._wait_for_ready(release_name, namespace, model_name, timeout=timeout)
+        return self._wait_for_ready(safe_name, namespace, model_name, timeout=timeout)
 
     def undeploy(self, release_name: str, namespace: str) -> None:
         """Helm uninstall a release."""

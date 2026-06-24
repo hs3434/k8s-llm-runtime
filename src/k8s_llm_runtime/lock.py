@@ -80,8 +80,16 @@ class K8sLeaseLock:
             holder = existing.spec.holder_identity
             acquired_at: Optional[datetime] = existing.spec.acquire_time
             if holder and acquired_at is not None and self._is_expired(acquired_at):
-                api.replace_namespaced_lease(
-                    name=self.key, namespace=self.namespace,
+                # Stale lease: delete + recreate (replace requires resourceVersion)
+                try:
+                    api.delete_namespaced_lease(
+                        name=self.key, namespace=self.namespace,
+                    )
+                except ApiException as exc:
+                    if exc.status != 404:
+                        raise
+                api.create_namespaced_lease(
+                    namespace=self.namespace,
                     body=self._build_lease(),
                 )
                 return True

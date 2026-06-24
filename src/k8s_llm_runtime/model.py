@@ -97,8 +97,9 @@ class ModelOperator:
             )
 
         start = time.time()
+        safe_name = self.vllm_op.to_dns_label(req.model)
         lock = K8sLeaseLock(
-            key=f"deploy-{req.model}",
+            key=f"deploy-{safe_name}",
             namespace=self.namespace,
             ttl=self.deploy_lock_ttl,
             acquire_timeout=self.deploy_timeout,
@@ -106,7 +107,7 @@ class ModelOperator:
 
         try:
             async with lock:
-                status = self.vllm_op.get_status(req.model, self.namespace)
+                status = self.vllm_op.get_status(safe_name, self.namespace)
                 if status.phase != "ready" or status.replicas_ready == 0:
                     logger.info("deploying_model", alias=req.model, hf_model=hf_model)
                     with _metrics.VLLM_DEPLOY_DURATION.labels(
@@ -130,7 +131,7 @@ class ModelOperator:
 
             # Forward request (outside lock)
             endpoint = status.endpoint or self.vllm_op.get_endpoint(
-                req.model, self.namespace,
+                safe_name, self.namespace,
             )
             payload = req.model_dump(exclude_none=True)
             payload["model"] = hf_model  # forward HF model name to vLLM
@@ -166,7 +167,8 @@ class ModelOperator:
     async def unload(self, alias: str) -> None:
         if alias not in self._loaded:
             return
-        self.vllm_op.undeploy(alias, self.namespace)
+        safe_name = self.vllm_op.to_dns_label(alias)
+        self.vllm_op.undeploy(safe_name, self.namespace)
         self._loaded.discard(alias)
         self._last_used.pop(alias, None)
         _metrics.MODELS_LOADED.labels(model_alias=alias).set(0)
@@ -187,8 +189,13 @@ class ModelOperator:
             releases = json.loads(result.stdout)
         except json.JSONDecodeError:
             return
+        # Helm release names are DNS-safe versions of the alias.
+        alias_by_safe = {
+            self.vllm_op.to_dns_label(a): a for a in self.model_aliases
+        }
         for release in releases:
-            name = release.get("name")
-            if name and name in self.model_aliases:
-                self._loaded.add(name)
-                _metrics.MODELS_LOADED.labels(model_alias=name).set(1)
+            safe_name = release.get("name")
+            alias = alias_by_safe.get(safe_name)
+            if alias:
+                self._loaded.add(alias)
+                _metrics.MODELS_LOADED.labels(model_alias=alias).set(1)
