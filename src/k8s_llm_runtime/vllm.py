@@ -62,6 +62,7 @@ class VLLMInferenceOperator:
             "--set", f"gpu.vendor={gpu.vendor.value}",
             "--set", f"gpu.limit={gpu.limit}",
             "--set", f"replicaCount={replicas}",
+            "--set", f"fullnameOverride={release_name}",
         ]
         self._run_helm(args)
         return self._wait_for_ready(release_name, namespace, model_name, timeout=timeout)
