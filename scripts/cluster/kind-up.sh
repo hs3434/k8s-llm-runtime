@@ -15,6 +15,15 @@ fi
 
 kind export kubeconfig --name "${CLUSTER_NAME}" --kubeconfig "${KUBECONFIG}"
 wait_for_node_ready 120
+
+# The kind ingress-nginx manifest requires nodeSelector ingress-ready=true.
+# Kind only auto-applies this label when extraPortMappings is set; we don't
+# expose 80/443 on the host (port-forward is enough), so label manually.
+log "Labeling nodes with ingress-ready=true"
+for node in $(kind get nodes --name "${CLUSTER_NAME}"); do
+    kubectl label node "${node}" ingress-ready=true --overwrite
+done
+
 install_ingress_nginx
 install_metrics_server
 

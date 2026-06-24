@@ -1,103 +1,116 @@
-# Cluster Bootstrap — TODO (in progress)
+# Cluster Bootstrap — DONE (2026-06-24)
 
-Carried over from session on 2026-06-24. See git history for context
-(commit `0bf3a3a`).
+`make cluster-up` now runs end-to-end without manual intervention
+(assuming the host has docker daemon configured to reach `registry.k8s.io`,
+e.g. via the HTTP_PROXY drop-in noted below).
 
-## Goal
+## Verification log (latest run)
 
-Get `make cluster-up` running end-to-end against a kind cluster whose
-nodes can pull images without manual intervention.
-
-## Known remaining work
-
-### 1. Verify `containerdConfigPatches` don't break kubelet
-
-The first attempt with `containerdConfigPatches` (including `tls.insecure_skip_verify`)
-caused `kubeadm init` to fail: `kubelet-check` timed out after 4m
-("The kubelet is not healthy after 4m0s").
-
-After removing the `tls.insecure_skip_verify` blocks, the user aborted
-the rebuild — needs verification.
-
-**Next step**: `make cluster-down && make cluster-up` and watch for
-kubelet readiness within ~30s of node container start. If still failing:
-
-- Check containerd logs inside the control-plane container:
-  `docker exec k8s-llm-demo-kind-control-plane journalctl -u containerd`
-- Confirm the TOML patches parse (containerd will fail to start if not).
-- Try one registry first (only `registry.k8s.io` → `k8s.m.daocloud.io`)
-  before adding all five mirrors.
-
-### 2. Verify ingress-nginx pods actually become Ready
-
-Once the cluster is healthy, `install_ingress_nginx` should pull
-`registry.k8s.io/ingress-nginx/controller:v1.10.0` via the mirror.
-
-Sanity check:
-
-```bash
-kubectl -n ingress-nginx get pods
-# Expected: controller pod Running, admission jobs Completed
+```
+[19:57:23] ✓ kind cluster deleted
+[19:58:34] Installing ingress-nginx
+...
+pod/ingress-nginx-controller-57bf4898db-t5pvx condition met
+[19:58:34] Installing metrics-server (for HPA)
+...
+deployment "metrics-server" successfully rolled out
+[20:00:39] ✓ kind cluster ready. KUBECONFIG=./kubeconfig
 ```
 
-### 3. Verify metrics-server
+Final state (verified):
 
-Same flow — pull `registry.k8s.io/metrics-server/metrics-server:v0.x`
-via mirror, check `kubectl top nodes` works.
+- 3 nodes Ready (control-plane + 2 workers)
+- `ingress-nginx-controller` 1/1 Running
+- `metrics-server` 1/1 Running
+- `kubectl top nodes` returns CPU/memory data
 
-### 4. README — document the bootstrap flow
+## What was wrong (recap of debugging)
 
-`README.md` should tell new users:
+Three independent blockers combined to make the previous `make cluster-up`
+fail at the ingress-nginx step:
+
+### 1. `nodeSelector ingress-ready=true` on ingress-nginx controller
+
+The official `kind` deploy.yaml requires this label, but kind only
+auto-applies it when the node has `extraPortMappings`. We don't expose
+80/443 on the host (the project uses `kubectl port-forward`), so the
+label is missing.
+
+**Fix**: `kind-up.sh` now labels every node with `ingress-ready=true`
+right after `wait_for_node_ready`. Could also be solved by adding
+`extraPortMappings` to `kind-config.yaml` but the manual label is
+explicit and doesn't bind host ports.
+
+### 2. Deprecated `mirrors` field ignored by containerd v2
+
+`kindest/node:v1.32.2` ships with `containerd v2.0.2`, where
+`[plugins."io.containerd.grpc.v1.cri".registry.mirrors]` is **deprecated**
+and silently ignored when `config_path` is also set (which it is by
+default). Result: image pulls inside kind nodes go directly to
+`registry.k8s.io`, hit network restrictions, and hang.
+
+**Fix (chosen)**: pre-load images into kind nodes from the host before
+applying the manifest. New `preload_image_to_kind` helper in `common.sh`:
 
 ```bash
-# One-time prereqs install (kind + kubectl to ~/.local/bin)
-./scripts/cluster/install-prereqs.sh
-
-# Per-session: put tools on PATH
-export PATH="$HOME/.local/bin:$PATH"
-
-# Bring up the cluster
-make cluster-up
+docker pull --platform linux/amd64 <image>
+docker save <image> | docker exec -i <node> \
+    ctr -n k8s.io images import --snapshotter=overlayfs -
 ```
 
-Also mention:
+Note: `kind load docker-image` was tried first but fails on multi-arch
+manifests with `rpc error: code = NotFound desc = content digest ...: not found`.
+The `docker save | ctr import` pipe sidesteps that.
 
-- `KUBECTL_VERSION` / `KIND_VERSION` / `*_DOWNLOAD_URL` env vars
-- `proxychains4` is auto-detected by `install-prereqs.sh`
-- Required system packages: `docker` (for kind), `curl` or `wget`,
-  `bash` ≥ 4 (for `set -euo pipefail`)
+Alternative long-term fix: migrate `kind-config.yaml` to the new
+`config_path` syntax (`/etc/containerd/certs.d/<host>/hosts.toml` with
+`extraMounts`). Not done yet because the daocloud mirror only caches
+core K8s images (coredns, etcd, kube-apiserver, ...) — `ingress-nginx/controller`,
+`kube-webhook-certgen`, and `metrics-server` all return **403** from
+`k8s.m.daocloud.io`. The pre-load path is more reliable for our image
+set.
 
-### 5. Plan ahead: vLLM image is ~15 GB
+### 3. Host docker can't reach `registry.k8s.io` directly
 
-When Phase 5 reaches the e2e demo with vLLM, the container image
-pull will be large. Two paths:
+`registry.k8s.io` resolves to IPv6 (`asia-east1-docker.pkg.dev`) which
+times out from this network.
 
-- **Mirror path**: add `rocm-docker.m.daocloud.io` mirror for
-  `rocm.docker.amd.com` (ROCm images) — needs verification that
-  DaoCloud mirrors these.
-- **Preload path**: build vLLM into a local image, push to kind via
-  `kind load docker-image vllm-qwen:latest --name k8s-llm-demo-kind`.
+**Fix (host-level, NOT in repo)**: `systemd` drop-in for docker daemon:
 
-Whichever path is chosen, document it in `docs/architecture.md` during
-Phase 6.
+```
+# /etc/systemd/system/docker.service.d/http-proxy.conf
+[Service]
+Environment="HTTP_PROXY=http://127.0.0.1:10809"
+Environment="HTTPS_PROXY=http://127.0.0.1:10809"
+Environment="NO_PROXY=localhost,127.0.0.1,::1,.svc,.cluster.local"
+```
 
-### 6. Cleanup: existing in-progress cluster
+Where `127.0.0.1:10809` is the local HTTP proxy (xray in this
+environment; substitute your own). The proxy config belongs on the
+host, not in the repo — different networks will use different proxies.
 
-`kind get clusters` after the aborted rebuild may show a half-built
-cluster. Run `make cluster-down` (or `kind delete cluster --name
-k8s-llm-demo-kind`) before the next `make cluster-up`.
+The repo only requires that *some* mechanism on the host makes
+`docker pull registry.k8s.io/...` work.
 
-## Current branch / commit state
+### 4. `kubectl apply -f https://github.com/...` hangs
 
-- Branch: `main`
-- Tracking: `origin/main` at https://github.com/hs3434/k8s-llm-runtime
-- Latest commit: `0bf3a3a refactor(cluster): separate kubectl/kind install + add registry mirror`
+`github.com` direct downloads time out (TLS handshake). The kind
+ingress-nginx and metrics-server manifests are now bundled in
+`scripts/cluster/manifests/` and applied from local files.
 
-## Environment notes
+## Files changed in this round
 
-- `proxychains4` available at `/usr/local/bin/proxychains4` —
-  ~10x speedup for direct downloads to Google CDN.
-- `kubectl` already installed at `~/.local/bin/kubectl` (v1.35.0).
-- No sudo available — install scripts target `~/.local/bin` only.
-- Mirror that works for `registry.k8s.io`: `k8s.m.daocloud.io`
-  (verified `ImagePullBackOff` resolves; ~1.5s per 273 MB image).
+- `scripts/cluster/common.sh` — `preload_image_to_kind` helper,
+  `install_metrics_server` uses `kubectl rollout status` instead of
+  `kubectl wait` (which races against old pods during rollout)
+- `scripts/cluster/kind-up.sh` — labels nodes with `ingress-ready=true`
+- `scripts/cluster/manifests/ingress-nginx-kind-v1.10.0.yaml` (new)
+- `scripts/cluster/manifests/metrics-server.yaml` (new)
+
+## Still pending (from original TODO)
+
+- Plan ahead for vLLM 15 GB image pull — same pre-load pattern will
+  apply (host pulls via docker daemon proxy, then load into kind).
+  See `docs/architecture.md` when Phase 6 is reached.
+- README — should mention the host docker daemon proxy prerequisite
+  (separate PR).
