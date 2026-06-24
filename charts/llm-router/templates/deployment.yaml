@@ -1,0 +1,99 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "llm-router.fullname" . }}
+  labels:
+    {{- include "llm-router.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "llm-router.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "llm-router.selectorLabels" . | nindent 8 }}
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      serviceAccountName: {{ include "llm-router.fullname" . }}
+      containers:
+        - name: router
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          env:
+            - name: MODEL_CONFIG_PATH
+              value: /app/config/models.yaml
+            - name: CHART_PATH
+              value: /app/charts/llm-inference
+            - name: TARGET_NAMESPACE
+              value: {{ .Values.targetNamespace }}
+            - name: GPU_VENDOR
+              value: {{ .Values.models.defaultGpu.vendor }}
+            - name: GPU_LIMIT
+              value: {{ .Values.models.defaultGpu.limit | quote }}
+            - name: IDLE_TIMEOUT
+              value: {{ .Values.models.idleTimeoutSeconds | quote }}
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+          volumeMounts:
+            - name: model-config
+              mountPath: /app/config
+              readOnly: true
+            - name: chart-bundle
+              mountPath: /app/charts
+              readOnly: true
+          resources:
+            requests:
+              cpu: {{ .Values.resources.requests.cpu | quote }}
+              memory: {{ .Values.resources.requests.memory | quote }}
+            limits:
+              cpu: {{ .Values.resources.limits.cpu | quote }}
+              memory: {{ .Values.resources.limits.memory | quote }}
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+      initContainers:
+        - name: load-chart
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          command:
+            - sh
+            - -c
+            - |
+              mkdir -p /app/charts/llm-inference && \
+              cp -r /chart-source/. /app/charts/llm-inference/ && \
+              ls /app/charts/llm-inference/
+          volumeMounts:
+            - name: chart-source
+              mountPath: /chart-source
+              readOnly: true
+            - name: chart-bundle
+              mountPath: /app/charts
+      volumes:
+        - name: model-config
+          configMap:
+            name: {{ include "llm-router.fullname" . }}-models
+        - name: chart-source
+          configMap:
+            name: {{ include "llm-router.fullname" . }}-chart-source
+        - name: chart-bundle
+          emptyDir: {}
