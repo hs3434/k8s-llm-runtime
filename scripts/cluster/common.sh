@@ -54,10 +54,20 @@ install_ingress_nginx() {
 
 install_metrics_server() {
     log "Installing metrics-server (for HPA)"
-    preload_image_to_kind "registry.k8s.io/metrics-server/metrics-server:v0.7.2"
+    preload_image_to_kind "registry.k8s.io/metrics-server/metrics-server:v0.8.1"
     kubectl apply -f "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/manifests/metrics-server.yaml"
     # Patch for kind: --kubelet-insecure-tls (insecure certs)
     kubectl patch deployment metrics-server -n kube-system --type=json \
         -p='[{"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--kubelet-insecure-tls"}]'
     kubectl rollout status deployment metrics-server -n kube-system --timeout=300s
+}
+
+install_nvidia_device_plugin() {
+    local ns=nvidia-device-plugin
+    local img="nvcr.io/nvidia/k8s-device-plugin:v0.17.2"
+    log "Installing nvidia-device-plugin ${img}"
+    preload_image_to_kind "${img}"
+    kubectl create namespace "${ns}" --dry-run=client -o yaml | kubectl apply -f -
+    kubectl apply -n "${ns}" -f "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/manifests/nvidia-device-plugin.yaml"
+    kubectl rollout status daemonset/nvidia-device-plugin -n "${ns}" --timeout=300s
 }

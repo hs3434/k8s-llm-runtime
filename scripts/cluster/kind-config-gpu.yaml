@@ -1,0 +1,47 @@
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+nodes:
+  - role: control-plane
+  - role: worker
+    labels:
+      k8s-llm-runtime/gpu: "true"
+    extraMounts:
+      - hostPath: ${CDI_SPEC_DIR}
+        containerPath: /etc/cdi
+        readOnly: true
+      - hostPath: /usr/bin/nvidia-cdi-hook
+        containerPath: /usr/bin/nvidia-cdi-hook
+        readOnly: true
+      - hostPath: /usr/bin/nvidia-ctk
+        containerPath: /usr/bin/nvidia-ctk
+        readOnly: true
+      - hostPath: /usr/bin/nvidia-smi
+        containerPath: /usr/bin/nvidia-smi
+        readOnly: true
+      - hostPath: ${NVIDIA_DRIVER_LIBS_HOST_DIR}
+        containerPath: ${NVIDIA_HOST_LIBDIR}
+        readOnly: true
+      - hostPath: /lib/firmware/nvidia
+        containerPath: /lib/firmware/nvidia
+        readOnly: true
+      - hostPath: /dev/nvidia0
+        containerPath: /dev/nvidia0
+      - hostPath: /dev/nvidia1
+        containerPath: /dev/nvidia1
+      - hostPath: /dev/nvidia2
+        containerPath: /dev/nvidia2
+      - hostPath: /dev/nvidia3
+        containerPath: /dev/nvidia3
+      - hostPath: /dev/nvidiactl
+        containerPath: /dev/nvidiactl
+      - hostPath: /dev/nvidia-modeset
+        containerPath: /dev/nvidia-modeset
+      - hostPath: /dev/nvidia-uvm
+        containerPath: /dev/nvidia-uvm
+      - hostPath: /dev/nvidia-uvm-tools
+        containerPath: /dev/nvidia-uvm-tools
+  - role: worker
+containerdConfigPatches:
+  - |-
+    [plugins."io.containerd.grpc.v1.cri"]
+      enable_cdi = true
