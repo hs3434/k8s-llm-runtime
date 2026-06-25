@@ -70,3 +70,14 @@ def test_node_selector_propagates(helm_template):
     manifest = helm_template(['nodeSelector."amd\\.com/gpu\\.product"=MI300X'])
     assert "amd.com/gpu.product" in manifest
     assert "MI300X" in manifest
+
+
+def test_hf_endpoint_default_uses_mirror(helm_template):
+    manifest = helm_template()
+    assert "HF_ENDPOINT" in manifest
+    assert "hf-mirror.com" in manifest
+
+
+def test_hf_endpoint_override(helm_template):
+    manifest = helm_template(["model.hfEndpoint=https://huggingface.co"])
+    assert '"https://huggingface.co"' in manifest

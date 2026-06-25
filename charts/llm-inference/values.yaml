@@ -8,6 +8,7 @@ image:
 model:
   name: Qwen/Qwen2.5-0.5B-Instruct
   hfTokenSecret: ""
+  hfEndpoint: https://hf-mirror.com
 
 gpu:
   vendor: none

@@ -34,6 +34,8 @@ spec:
               containerPort: {{ .Values.vllm.port }}
               protocol: TCP
           env:
+            - name: HF_ENDPOINT
+              value: {{ .Values.model.hfEndpoint | quote }}
             {{- if .Values.model.hfTokenSecret }}
             - name: HF_TOKEN
               valueFrom:

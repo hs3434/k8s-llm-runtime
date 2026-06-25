@@ -53,3 +53,11 @@ def test_ingress_disabled_by_default(helm_template):
 def test_replicas_configurable(helm_template):
     manifest = helm_template(chart="router", set_values=["replicaCount=5"])
     assert "replicas: 5" in manifest
+
+
+def test_vllm_extra_args_do_not_require_missing_configmap(helm_template):
+    manifest = helm_template(
+        chart="router",
+        set_values=["vllmHelmExtraArgs=--set nodeSelector.foo=bar"],
+    )
+    assert "llm-router-vllm-extra" not in manifest

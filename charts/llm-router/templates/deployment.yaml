@@ -55,11 +55,6 @@ spec:
             - name: chart-bundle
               mountPath: /app/charts
               readOnly: true
-            {{- if .Values.vllmHelmExtraArgs }}
-            - name: vllm-helm-extra
-              mountPath: /etc/vllm-extra
-              readOnly: true
-            {{- end }}
           resources:
             requests:
               cpu: {{ .Values.resources.requests.cpu | quote }}
@@ -105,8 +100,3 @@ spec:
             name: {{ include "llm-router.chartSourceName" . }}
         - name: chart-bundle
           emptyDir: {}
-        {{- if .Values.vllmHelmExtraArgs }}
-        - name: vllm-helm-extra
-          configMap:
-            name: {{ include "llm-router.fullname" . }}-vllm-extra
-        {{- end }}

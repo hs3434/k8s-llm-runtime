@@ -5,7 +5,7 @@ WORKDIR /build
 # Install uv from a Chinese PyPI mirror. Override with PIP_INDEX_URL
 # build-arg to use a different mirror in CI.
 ARG PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
-RUN pip install --no-cache-dir "${PIP_INDEX_URL}uv"
+RUN pip install --no-cache-dir --index-url "${PIP_INDEX_URL}" uv
 
 COPY pyproject.toml uv.lock* ./
 RUN if [ -f uv.lock ]; then \
@@ -25,6 +25,7 @@ FROM python:3.11-slim AS runtime
 # to deb.debian.org. Restricted networks should set APT_MIRROR to e.g.
 # https://mirrors.tuna.tsinghua.edu.cn/debian
 ARG APT_MIRROR=
+ARG HELM_VERSION=v3.14.0
 RUN if [ -n "${APT_MIRROR}" ]; then \
       sed -i "s|http://deb.debian.org/debian|${APT_MIRROR}|g; \
               s|http://deb.debian.org/debian-security|${APT_MIRROR}-security|g; \
@@ -32,8 +33,12 @@ RUN if [ -n "${APT_MIRROR}" ]; then \
           /etc/apt/sources.list.d/debian.sources; \
     fi && \
     apt-get update && apt-get install -y --no-install-recommends \
-        ca-certificates bash helm curl && \
-    rm -rf /var/lib/apt/lists/* && \
+        ca-certificates bash curl && \
+    curl -fsSL "https://get.helm.sh/helm-${HELM_VERSION}-linux-amd64.tar.gz" \
+      -o /tmp/helm.tar.gz && \
+    tar -xzf /tmp/helm.tar.gz -C /tmp && \
+    mv /tmp/linux-amd64/helm /usr/local/bin/helm && \
+    rm -rf /tmp/helm.tar.gz /tmp/linux-amd64 /var/lib/apt/lists/* && \
     helm version --short
 
 # App code
