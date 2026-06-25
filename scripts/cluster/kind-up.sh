@@ -9,6 +9,7 @@ CDI_SPEC_DIR="${CDI_SPEC_DIR:-$HOME/.config/cdi}"
 CDI_SPEC_FILE="${CDI_SPEC_DIR}/nvidia.yaml"
 NVIDIA_HOST_LIBDIR="${NVIDIA_HOST_LIBDIR:-/opt/nvidia-driver-libs}"
 NVIDIA_DRIVER_LIBS_HOST_DIR="${NVIDIA_DRIVER_LIBS_HOST_DIR:-$HOME/.cache/k8s-llm-runtime/nvidia-driver-libs}"
+HF_CACHE_HOST_DIR="${HF_CACHE_HOST_DIR:-/work/run/projects/bio-24/k8s-llm-runtime/cache}"
 
 GPU_ENABLED=0
 if command -v nvidia-ctk >/dev/null 2>&1 && [[ -e /dev/nvidia0 ]]; then
@@ -54,6 +55,7 @@ if [[ "${GPU_ENABLED}" -eq 1 ]]; then
     export CDI_SPEC_DIR="${CDI_SPEC_RENDERED_DIR}"
     export NVIDIA_HOST_LIBDIR
     export NVIDIA_DRIVER_LIBS_HOST_DIR
+    export HF_CACHE_HOST_DIR
     envsubst < "${KIND_CONFIG_SRC}" > "${KIND_CONFIG_RENDERED}"
     CONFIG_ARG="--config ${KIND_CONFIG_RENDERED}"
 else

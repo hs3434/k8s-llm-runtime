@@ -33,9 +33,21 @@ spec:
             - name: http
               containerPort: {{ .Values.vllm.port }}
               protocol: TCP
+          {{- if .Values.model.hfCachePath }}
+          volumeMounts:
+            - name: hf-cache
+              mountPath: {{ .Values.model.hfCachePath | quote }}
+              readOnly: true
+          {{- end }}
           env:
             - name: HF_ENDPOINT
               value: {{ .Values.model.hfEndpoint | quote }}
+            {{- if .Values.model.hfCachePath }}
+            - name: HF_HUB_CACHE
+              value: {{ .Values.model.hfCachePath | quote }}
+            - name: HF_HUB_OFFLINE
+              value: "1"
+            {{- end }}
             {{- if .Values.model.hfTokenSecret }}
             - name: HF_TOKEN
               valueFrom:
@@ -59,6 +71,13 @@ spec:
           {{- with .Values.nodeSelector }}
           nodeSelector:
             {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- if .Values.model.hfCachePath }}
+          volumes:
+            - name: hf-cache
+              hostPath:
+                path: {{ .Values.model.hfCachePath | quote }}
+                type: DirectoryOrCreate
           {{- end }}
       {{- with .Values.tolerations }}
       tolerations:

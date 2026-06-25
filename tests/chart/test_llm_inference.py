@@ -81,3 +81,18 @@ def test_hf_endpoint_default_uses_mirror(helm_template):
 def test_hf_endpoint_override(helm_template):
     manifest = helm_template(["model.hfEndpoint=https://huggingface.co"])
     assert '"https://huggingface.co"' in manifest
+
+
+def test_hf_cache_path_default_off(helm_template):
+    manifest = helm_template()
+    assert "HF_HUB_CACHE" not in manifest
+    assert "hostPath" not in manifest
+
+
+def test_hf_cache_path_mounts_hostpath_and_env(helm_template):
+    manifest = helm_template(["model.hfCachePath=/srv/models"])
+    assert "HF_HUB_CACHE" in manifest
+    assert '"/srv/models"' in manifest
+    assert "hostPath:" in manifest
+    assert 'path: "/srv/models"' in manifest
+    assert "hostPath:" in manifest

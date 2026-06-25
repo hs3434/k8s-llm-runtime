@@ -9,6 +9,11 @@ model:
   name: Qwen/Qwen2.5-0.5B-Instruct
   hfTokenSecret: ""
   hfEndpoint: https://hf-mirror.com
+  # Path on the worker node where HF model weights are pre-staged.
+  # Mounted into the vLLM container as HF_HUB_CACHE so weights are
+  # read from local disk instead of re-downloaded. Leave empty to
+  # fall back to the in-container cache + HF_ENDPOINT.
+  hfCachePath: ""
 
 gpu:
   vendor: none

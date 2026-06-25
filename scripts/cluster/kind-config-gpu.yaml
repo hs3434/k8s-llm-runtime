@@ -40,6 +40,9 @@ nodes:
         containerPath: /dev/nvidia-uvm
       - hostPath: /dev/nvidia-uvm-tools
         containerPath: /dev/nvidia-uvm-tools
+      - hostPath: ${HF_CACHE_HOST_DIR}
+        containerPath: ${HF_CACHE_HOST_DIR}
+        readOnly: true
   - role: worker
 containerdConfigPatches:
   - |-
