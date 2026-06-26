@@ -1,8 +1,8 @@
-# AMD ROCm Python 后端面试 Demo 指南
+# k8s-llm-runtime 使用说明
 
-本文档用于演示 `k8s-llm-runtime` 的核心能力：在 Kubernetes 上通过 Router 按需部署 vLLM 模型服务，并提供 OpenAI-compatible API。
+本文档介绍如何在本地 kind/minikube 集群上部署和验证 `k8s-llm-runtime`：通过 Router 按需部署 vLLM 模型服务，并提供 OpenAI-compatible API。
 
-虽然标题面向 AMD ROCm 场景，但当前项目同时支持：
+本项目当前支持：
 
 - CPU / mock-vLLM
 - AMD GPU：`amd.com/gpu`
@@ -10,7 +10,7 @@
 
 ---
 
-## 1. Demo 前准备
+## 1. 部署前准备
 
 ### 本地工具
 
@@ -47,7 +47,7 @@ make cluster-up CLUSTER=kind
 
 ---
 
-## 2. 项目讲解顺序
+## 2. 项目结构说明
 
 建议先打开项目目录，按下面顺序介绍：
 
@@ -73,7 +73,7 @@ make cluster-up CLUSTER=kind
 
 ---
 
-## 3. 本地 Demo 流程
+## 3. 本地部署与验证流程
 
 ### 3.1 启动 kind 集群
 
@@ -306,7 +306,7 @@ KUBECONFIG=./kubeconfig kubectl get all -n llm-models
 
 ---
 
-## 4. 本地模型缓存 Demo
+## 4. 本地模型缓存使用
 
 如果模型已经提前下载到：
 
@@ -336,7 +336,7 @@ HF_HUB_OFFLINE=1
 
 ---
 
-## 5. 架构讲解要点
+## 5. 关键设计说明
 
 ### Router 为什么动态部署模型
 
@@ -354,7 +354,7 @@ HF_HUB_OFFLINE=1
 
 Helm 足够轻量，部署、升级、回滚、卸载能力成熟，不需要额外 CRD 和 Controller。
 
-### AMD ROCm 如何支持
+### GPU 资源如何区分厂商
 
 `llm-inference` chart 根据：
 
@@ -382,7 +382,7 @@ resources:
 
 ---
 
-## 6. 常见面试问题
+## 6. 常见问题
 
 | 问题 | 回答 |
 |---|---|
