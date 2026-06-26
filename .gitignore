@@ -37,6 +37,7 @@ uv.lock
 htmlcov/
 .coverage
 .coverage.*
+coverage.xml
 
 # IDE / editor
 .idea/

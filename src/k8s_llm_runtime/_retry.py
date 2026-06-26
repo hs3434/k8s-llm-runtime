@@ -1,4 +1,5 @@
 """Retry decorator for transient kubernetes API errors."""
+
 from __future__ import annotations
 
 import functools
@@ -30,6 +31,7 @@ def _is_transient(exc: BaseException) -> bool:
 
 def k8s_retry(fn: Callable[P, R]) -> Callable[P, R]:
     """Decorator: retry transient K8s API errors with exponential backoff."""
+
     @functools.wraps(fn)
     def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
         return Retrying(

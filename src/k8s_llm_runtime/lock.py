@@ -1,4 +1,5 @@
 """Distributed lock backed by Kubernetes Lease objects."""
+
 from __future__ import annotations
 
 import asyncio
@@ -63,7 +64,8 @@ class K8sLeaseLock:
             return
         try:
             _client.coordination_api().delete_namespaced_lease(
-                name=self.key, namespace=self.namespace,
+                name=self.key,
+                namespace=self.namespace,
             )
         except ApiException as exc:
             if exc.status != 404:
@@ -75,7 +77,8 @@ class K8sLeaseLock:
         api = _client.coordination_api()
         try:
             existing = api.read_namespaced_lease(
-                name=self.key, namespace=self.namespace,
+                name=self.key,
+                namespace=self.namespace,
             )
             holder = existing.spec.holder_identity
             acquired_at: Optional[datetime] = existing.spec.acquire_time
@@ -83,7 +86,8 @@ class K8sLeaseLock:
                 # Stale lease: delete + recreate (replace requires resourceVersion)
                 try:
                     api.delete_namespaced_lease(
-                        name=self.key, namespace=self.namespace,
+                        name=self.key,
+                        namespace=self.namespace,
                     )
                 except ApiException as exc:
                     if exc.status != 404:

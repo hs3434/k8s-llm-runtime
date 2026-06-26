@@ -1,4 +1,5 @@
 """Fixtures for chart rendering tests."""
+
 from __future__ import annotations
 
 import subprocess
@@ -21,8 +22,7 @@ def chart_paths():
 def helm_template(chart_paths):
     """Return a function that renders the chart with given --set values."""
 
-    def _render(*args, chart: str = "inference",
-                set_values: list[str] | None = None) -> str:
+    def _render(*args, chart: str = "inference", set_values: list[str] | None = None) -> str:
         if args:
             if isinstance(args[0], str):
                 chart = args[0]
@@ -30,8 +30,12 @@ def helm_template(chart_paths):
             elif isinstance(args[0], list):
                 set_values = args[0]
         cmd = [
-            "helm", "template", "test-release", str(chart_paths[chart]),
-            "--namespace", "test-ns",
+            "helm",
+            "template",
+            "test-release",
+            str(chart_paths[chart]),
+            "--namespace",
+            "test-ns",
         ]
         for v in set_values or []:
             cmd.extend(["--set", v])

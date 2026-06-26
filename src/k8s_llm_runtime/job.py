@@ -1,4 +1,5 @@
 """Low-level K8s Job lifecycle management."""
+
 from __future__ import annotations
 
 import time
@@ -43,7 +44,8 @@ class K8sJobOperator:
         try:
             job = self._build_job(spec)
             batch_api().create_namespaced_job(
-                namespace=self.namespace, body=job,
+                namespace=self.namespace,
+                body=job,
             )
             return spec.name
         except Exception as exc:
@@ -52,7 +54,8 @@ class K8sJobOperator:
     @k8s_retry
     def get_status(self, job_name: str) -> JobStatus:
         job = batch_api().read_namespaced_job(
-            name=job_name, namespace=self.namespace,
+            name=job_name,
+            namespace=self.namespace,
         )
         s = job.status
         active = s.active or 0
@@ -93,7 +96,8 @@ class K8sJobOperator:
     @k8s_retry
     def delete(self, job_name: str) -> None:
         batch_api().delete_namespaced_job(
-            name=job_name, namespace=self.namespace,
+            name=job_name,
+            namespace=self.namespace,
         )
 
     def wait_for_completion(
@@ -163,7 +167,9 @@ class K8sJobOperator:
 
     @staticmethod
     def _infer_phase(
-        active: int, succeeded: int, failed: int,
+        active: int,
+        succeeded: int,
+        failed: int,
     ) -> Literal["pending", "running", "succeeded", "failed"]:
         if succeeded > 0:
             return "succeeded"

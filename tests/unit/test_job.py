@@ -1,4 +1,5 @@
 """Tests for K8sJobOperator."""
+
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -154,7 +155,9 @@ def test_wait_for_completion_returns_status(op):
     fake_job.status = _mock_job_status(succeeded=1)
     fake_batch = MagicMock()
     fake_batch.read_namespaced_job.return_value = fake_job
-    with patch("k8s_llm_runtime.job.batch_api", return_value=fake_batch), \
-         patch("k8s_llm_runtime.job.time.sleep"):
+    with (
+        patch("k8s_llm_runtime.job.batch_api", return_value=fake_batch),
+        patch("k8s_llm_runtime.job.time.sleep"),
+    ):
         status = op.wait_for_completion("hello", timeout=10, poll_interval=1)
     assert status.phase == "succeeded"

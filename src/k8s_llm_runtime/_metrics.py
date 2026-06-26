@@ -1,4 +1,5 @@
 """Prometheus metric definitions."""
+
 from prometheus_client import Counter, Gauge, Histogram
 
 # --- K8s operations ---

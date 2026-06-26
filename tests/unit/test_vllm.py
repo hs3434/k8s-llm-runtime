@@ -1,4 +1,5 @@
 """Tests for VLLMInferenceOperator."""
+
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -32,15 +33,26 @@ def _helm_fail(stderr: str = "release already exists") -> MagicMock:
 
 
 def test_deploy_renders_and_installs(op):
-    with patch("subprocess.run") as mock_run, \
-         patch.object(op, "_wait_for_ready", return_value=VLLMDeployment(
-             release_name="qwen", namespace="llm-models",
-             model_name="Qwen/...", endpoint="http://qwen.llm-models:8000",
-             phase="ready", replicas_ready=1,
-         )):
+    with (
+        patch("subprocess.run") as mock_run,
+        patch.object(
+            op,
+            "_wait_for_ready",
+            return_value=VLLMDeployment(
+                release_name="qwen",
+                namespace="llm-models",
+                model_name="Qwen/...",
+                endpoint="http://qwen.llm-models:8000",
+                phase="ready",
+                replicas_ready=1,
+            ),
+        ),
+    ):
         mock_run.return_value = _helm_ok()
         result = op.deploy(
-            "qwen", "Qwen/Qwen2.5-0.5B-Instruct", "llm-models",
+            "qwen",
+            "Qwen/Qwen2.5-0.5B-Instruct",
+            "llm-models",
             gpu=GPUResource(vendor=GPUVendor.AMD, limit=1),
         )
     assert result.release_name == "qwen"
@@ -50,11 +62,21 @@ def test_deploy_renders_and_installs(op):
 
 
 def test_deploy_passes_gpu_vendor_to_values(op):
-    with patch("subprocess.run") as mock_run, \
-         patch.object(op, "_wait_for_ready", return_value=VLLMDeployment(
-             release_name="x", namespace="ns", model_name="m",
-             endpoint="e", phase="ready", replicas_ready=1,
-         )):
+    with (
+        patch("subprocess.run") as mock_run,
+        patch.object(
+            op,
+            "_wait_for_ready",
+            return_value=VLLMDeployment(
+                release_name="x",
+                namespace="ns",
+                model_name="m",
+                endpoint="e",
+                phase="ready",
+                replicas_ready=1,
+            ),
+        ),
+    ):
         mock_run.return_value = _helm_ok()
         op.deploy("x", "Qwen/0.5B", "ns", gpu=GPUResource(vendor=GPUVendor.AMD, limit=2))
     cmd = mock_run.call_args_list[0].args[0]
@@ -64,8 +86,11 @@ def test_deploy_passes_gpu_vendor_to_values(op):
 
 def test_deploy_propagates_helm_error(op):
     from k8s_llm_runtime.errors import VLLMDeployError
-    with patch("subprocess.run", return_value=_helm_fail("bad chart")), \
-         patch.object(op, "_wait_for_ready"):
+
+    with (
+        patch("subprocess.run", return_value=_helm_fail("bad chart")),
+        patch.object(op, "_wait_for_ready"),
+    ):
         with pytest.raises(VLLMDeployError) as exc:
             op.deploy("x", "Qwen/0.5B", "ns")
     assert "bad chart" in str(exc.value)
@@ -82,14 +107,17 @@ def test_undeploy_calls_helm_uninstall(op):
 
 def test_undeploy_propagates_error(op):
     from k8s_llm_runtime.errors import VLLMUndeployError
+
     with patch("subprocess.run", return_value=_helm_fail("release not found")):
         with pytest.raises(VLLMUndeployError):
             op.undeploy("qwen", "llm-models")
 
 
 def test_get_endpoint_builds_internal_url(op):
-    assert op.get_endpoint("qwen-7b", "llm-models") == \
-        "http://qwen-7b.llm-models.svc.cluster.local:8000"
+    assert (
+        op.get_endpoint("qwen-7b", "llm-models")
+        == "http://qwen-7b.llm-models.svc.cluster.local:8000"
+    )
 
 
 def test_run_helm_sets_kubeconfig_env(op):

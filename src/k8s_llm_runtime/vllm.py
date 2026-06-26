@@ -1,4 +1,5 @@
 """Mid-level vLLM deployment via Helm CLI."""
+
 from __future__ import annotations
 
 import json
@@ -38,8 +39,9 @@ class VLLMInferenceOperator:
 
     DEFAULT_PORT = 8000
 
-    def __init__(self, chart_path: str = "./charts/llm-inference",
-                 kubeconfig: Optional[str] = None):
+    def __init__(
+        self, chart_path: str = "./charts/llm-inference", kubeconfig: Optional[str] = None
+    ):
         self.chart_path = chart_path
         self.kubeconfig = kubeconfig
 
@@ -72,15 +74,29 @@ class VLLMInferenceOperator:
             gpu = GPUResource()
         safe_name = self.to_dns_label(release_name)
         args = [
-            "helm", "upgrade", "--install", safe_name, self.chart_path,
-            "--namespace", namespace, "--create-namespace",
-            "--wait", "--timeout", f"{timeout}s",
-            "--set", f"model.name={model_name}",
-            "--set", f"model.alias={release_name}",
-            "--set", f"gpu.vendor={gpu.vendor.value}",
-            "--set", f"gpu.limit={gpu.limit}",
-            "--set", f"replicaCount={replicas}",
-            "--set", f"fullnameOverride={safe_name}",
+            "helm",
+            "upgrade",
+            "--install",
+            safe_name,
+            self.chart_path,
+            "--namespace",
+            namespace,
+            "--create-namespace",
+            "--wait",
+            "--timeout",
+            f"{timeout}s",
+            "--set",
+            f"model.name={model_name}",
+            "--set",
+            f"model.alias={release_name}",
+            "--set",
+            f"gpu.vendor={gpu.vendor.value}",
+            "--set",
+            f"gpu.limit={gpu.limit}",
+            "--set",
+            f"replicaCount={replicas}",
+            "--set",
+            f"fullnameOverride={safe_name}",
         ]
         # Optional extra helm flags via env var, e.g. for swapping to a
         # mock image in CI: `VLLM_HELM_EXTRA_ARGS="-f /etc/mock/values.yaml"`
@@ -99,22 +115,35 @@ class VLLMInferenceOperator:
 
     def get_status(self, release_name: str, namespace: str) -> VLLMDeployment:
         """Inspect helm release status and pod readiness."""
-        out = self._run_helm([
-            "helm", "list", "--namespace", namespace,
-            "--filter", f"^{release_name}$",
-            "--output", "json",
-        ])
+        out = self._run_helm(
+            [
+                "helm",
+                "list",
+                "--namespace",
+                namespace,
+                "--filter",
+                f"^{release_name}$",
+                "--output",
+                "json",
+            ]
+        )
         try:
             releases = json.loads(out)
         except json.JSONDecodeError:
             return VLLMDeployment(
-                release_name=release_name, namespace=namespace,
-                model_name="", endpoint="", phase="pending",
+                release_name=release_name,
+                namespace=namespace,
+                model_name="",
+                endpoint="",
+                phase="pending",
             )
         if not releases:
             return VLLMDeployment(
-                release_name=release_name, namespace=namespace,
-                model_name="", endpoint="", phase="pending",
+                release_name=release_name,
+                namespace=namespace,
+                model_name="",
+                endpoint="",
+                phase="pending",
             )
         helm_status = releases[0].get("status", "unknown")
         phase: Literal["pending", "deploying", "ready", "failed"] = (
@@ -129,8 +158,7 @@ class VLLMInferenceOperator:
             )
             for p in pods.items:
                 if p.status and p.status.conditions:
-                    if any(c.type == "Ready" and c.status == "True"
-                           for c in p.status.conditions):
+                    if any(c.type == "Ready" and c.status == "True" for c in p.status.conditions):
                         replicas_ready += 1
         except ApiException:
             pass
@@ -139,7 +167,8 @@ class VLLMInferenceOperator:
             phase = "deploying"
 
         return VLLMDeployment(
-            release_name=release_name, namespace=namespace,
+            release_name=release_name,
+            namespace=namespace,
             model_name="",
             endpoint=self.get_endpoint(release_name, namespace),
             phase=phase,
@@ -148,10 +177,7 @@ class VLLMInferenceOperator:
 
     def get_endpoint(self, release_name: str, namespace: str) -> str:
         """Internal cluster DNS endpoint for the vLLM service."""
-        return (
-            f"http://{release_name}.{namespace}.svc.cluster.local:"
-            f"{self.DEFAULT_PORT}"
-        )
+        return f"http://{release_name}.{namespace}.svc.cluster.local:{self.DEFAULT_PORT}"
 
     # --- Internal helpers ---
 
@@ -160,12 +186,14 @@ class VLLMInferenceOperator:
         if self.kubeconfig:
             env["KUBECONFIG"] = self.kubeconfig
         result = subprocess.run(
-            args, capture_output=True, text=True, timeout=180, env=env,
+            args,
+            capture_output=True,
+            text=True,
+            timeout=180,
+            env=env,
         )
         if result.returncode != 0:
-            raise VLLMDeployError(
-                f"helm command failed (rc={result.returncode}): {result.stderr}"
-            )
+            raise VLLMDeployError(f"helm command failed (rc={result.returncode}): {result.stderr}")
         return result.stdout
 
     def _wait_for_ready(
@@ -181,13 +209,12 @@ class VLLMInferenceOperator:
             status = self.get_status(release_name, namespace)
             if status.phase == "ready" and status.replicas_ready > 0:
                 return VLLMDeployment(
-                    release_name=release_name, namespace=namespace,
+                    release_name=release_name,
+                    namespace=namespace,
                     model_name=model_name,
                     endpoint=status.endpoint,
                     phase="ready",
                     replicas_ready=status.replicas_ready,
                 )
             time.sleep(poll_interval)
-        raise VLLMDeployTimeoutError(
-            f"vLLM {release_name} did not become ready within {timeout}s"
-        )
+        raise VLLMDeployTimeoutError(f"vLLM {release_name} did not become ready within {timeout}s")

@@ -2,6 +2,7 @@
 
 Skipped unless KUBECONFIG points to a live cluster.
 """
+
 import os
 
 import httpx

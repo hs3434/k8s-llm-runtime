@@ -1,4 +1,5 @@
 """Integration test fixtures (kind cluster)."""
+
 import os
 import subprocess
 import time

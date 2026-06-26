@@ -1,4 +1,5 @@
 """High-level model serving router."""
+
 from __future__ import annotations
 
 import json
@@ -93,8 +94,7 @@ class ModelOperator:
         hf_model = self.model_aliases.get(req.model)
         if not hf_model:
             raise ModelNotFoundError(
-                f"Unknown model alias: {req.model}. "
-                f"Available: {list(self.model_aliases.keys())}"
+                f"Unknown model alias: {req.model}. Available: {list(self.model_aliases.keys())}"
             )
 
         start = time.time()
@@ -125,14 +125,16 @@ class ModelOperator:
                             )
                         except VLLMDeployError:
                             _metrics.VLLM_DEPLOY_FAILURES.labels(
-                                model_alias=req.model, reason="deploy_error",
+                                model_alias=req.model,
+                                reason="deploy_error",
                             ).inc()
                             raise
                 self._loaded.add(req.model)
 
             # Forward request (outside lock)
             endpoint = status.endpoint or self.vllm_op.get_endpoint(
-                safe_name, self.namespace,
+                safe_name,
+                self.namespace,
             )
             payload = req.model_dump(exclude_none=True)
             payload["model"] = hf_model  # forward HF model name to vLLM
@@ -151,14 +153,16 @@ class ModelOperator:
                 time.time() - start,
             )
             _metrics.INFERENCE_REQUESTS.labels(
-                model_alias=req.model, status="ok",
+                model_alias=req.model,
+                status="ok",
             ).inc()
             _metrics.MODELS_LOADED.labels(model_alias=req.model).set(1)
             return ChatResponse.model_validate(body)
 
         except httpx.HTTPError:
             _metrics.INFERENCE_REQUESTS.labels(
-                model_alias=req.model, status="error",
+                model_alias=req.model,
+                status="error",
             ).inc()
             raise
 
@@ -188,7 +192,9 @@ class ModelOperator:
             env["KUBECONFIG"] = kubeconfig
         result = subprocess.run(  # noqa: ASYNC221
             ["helm", "list", "--namespace", self.namespace, "--output", "json"],
-            capture_output=True, text=True, env=env,
+            capture_output=True,
+            text=True,
+            env=env,
         )
         if result.returncode != 0:
             return
@@ -197,9 +203,7 @@ class ModelOperator:
         except json.JSONDecodeError:
             return
         # Helm release names are DNS-safe versions of the alias.
-        alias_by_safe = {
-            self.vllm_op.to_dns_label(a): a for a in self.model_aliases
-        }
+        alias_by_safe = {self.vllm_op.to_dns_label(a): a for a in self.model_aliases}
         for release in releases:
             safe_name = release.get("name")
             alias = alias_by_safe.get(safe_name)

@@ -1,4 +1,5 @@
 """Tests for kubernetes-client singleton."""
+
 from unittest.mock import patch
 
 import pytest
@@ -30,9 +31,10 @@ def test_load_kube_config_uses_explicit_path(tmp_path):
 
 
 def test_load_kube_config_falls_back_to_incluster():
-    with patch("kubernetes.config.load_kube_config",
-               side_effect=ConfigException("no kubeconfig")), \
-         patch("kubernetes.config.load_incluster_config") as mock_incluster:
+    with (
+        patch("kubernetes.config.load_kube_config", side_effect=ConfigException("no kubeconfig")),
+        patch("kubernetes.config.load_incluster_config") as mock_incluster,
+    ):
         _client.load_config(None)
         mock_incluster.assert_called_once()
         assert _client._config_loaded is True

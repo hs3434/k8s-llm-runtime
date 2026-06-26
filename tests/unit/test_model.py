@@ -1,4 +1,5 @@
 """Tests for ModelOperator."""
+
 import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -64,7 +65,9 @@ def _mock_response(payload, status_code=200):
     resp.raise_for_status = MagicMock()
     if status_code >= 400:
         resp.raise_for_status.side_effect = httpx.HTTPStatusError(
-            "error", request=MagicMock(), response=resp,
+            "error",
+            request=MagicMock(),
+            response=resp,
         )
     return resp
 
@@ -138,8 +141,12 @@ def test_chat_deploys_when_not_ready(op, mock_vllm_op):
         messages=[ChatMessage(role="user", content="hi")],
     )
     payload = {
-        "id": "x", "object": "chat.completion", "created": 1,
-        "model": "qwen-0.5b", "choices": [], "usage": {},
+        "id": "x",
+        "object": "chat.completion",
+        "created": 1,
+        "model": "qwen-0.5b",
+        "choices": [],
+        "usage": {},
     }
     with (
         _make_lock_patch(),

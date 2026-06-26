@@ -1,4 +1,5 @@
 """Tests for K8sLeaseLock."""
+
 import asyncio
 import itertools
 from unittest.mock import MagicMock, patch

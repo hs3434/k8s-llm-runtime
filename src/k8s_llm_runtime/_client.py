@@ -3,6 +3,7 @@
 Lazy-loads config and clients on first use. Honors `KUBECONFIG` env var
 if `kubeconfig_path` is None.
 """
+
 from __future__ import annotations
 
 import os
