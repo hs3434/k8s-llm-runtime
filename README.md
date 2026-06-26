@@ -51,7 +51,33 @@ python examples/vllm_qwen/client.py \
   --prompt "Hello"
 ```
 
-GPU 推理需要额外把 `vllm/vllm-openai:latest` 导入 GPU worker；CPU-only demo 可使用 `docker/mock-vllm/values-mock.yaml`。完整步骤见 [`docs/usage.md`](docs/usage.md)。
+GPU 推理还需要把 vLLM 运行时镜像导入到 GPU worker：
+
+```bash
+# 宿主机先拉一次
+docker pull vllm/vllm-openai:latest
+
+# 只导入 GPU worker，不重复导入到其它节点
+docker save vllm/vllm-openai:latest \
+  | docker exec -i k8s-llm-demo-kind-worker \
+      ctr -n k8s.io images import --snapshotter=overlayfs -
+```
+
+如果只想测 Router / Helm 编排流程，不想拉这个大镜像，可以用 CPU-only mock：
+
+```bash
+docker build -f docker/mock-vllm/Dockerfile -t mock-vllm:latest docker/mock-vllm/
+docker save mock-vllm:latest \
+  | docker exec -i k8s-llm-demo-kind-worker \
+      ctr -n k8s.io images import --snapshotter=overlayfs -
+
+KUBECONFIG=./kubeconfig helm upgrade --install llm-router ./charts/llm-router \
+  --namespace llm-system --create-namespace --wait \
+  --set-string nodeSelector.k8s-llm-runtime/router=true \
+  --set-string vllmHelmExtraArgs=-f\ /etc/mock/values-mock.yaml
+```
+
+完整步骤见 [`docs/usage.md`](docs/usage.md)。
 
 ## 文档
 
