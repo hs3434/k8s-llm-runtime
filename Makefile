@@ -1,4 +1,4 @@
-.PHONY: help install lint format type-check test test-unit test-chart test-integration cluster-up cluster-down clean
+.PHONY: help install lint format type-check test test-unit test-chart test-integration cluster-up cluster-down clean lock-runtime
 
 CLUSTER ?= kind
 KUBECONFIG ?= ./kubeconfig
@@ -11,7 +11,8 @@ help:
 	@echo "  type-check      - Run mypy strict"
 	@echo "  test            - Run unit + chart tests"
 	@echo "  test-integration- Run kind e2e tests"
-	@echo "  cluster-up      - Start \$$(CLUSTER) cluster"
+	@echo "  lock-runtime   - Refresh Docker runtime dependency lock"
+	@echo "  cluster-up      - Start $$(CLUSTER) cluster"
 
 install:
 	uv sync --all-extras
@@ -35,6 +36,9 @@ test-chart:
 
 test-integration:
 	uv run pytest tests/integration -v
+
+lock-runtime:
+	uv pip compile pyproject.toml -o docker/requirements.lock
 
 cluster-up:
 	@./scripts/cluster/$(CLUSTER)-up.sh

@@ -7,15 +7,8 @@ WORKDIR /build
 ARG PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
 RUN pip install --no-cache-dir --index-url "${PIP_INDEX_URL}" uv
 
-COPY pyproject.toml uv.lock* ./
-RUN if [ -f uv.lock ]; then \
-      uv export --frozen --no-dev --no-emit-project -o requirements.txt; \
-    else \
-      uv pip compile pyproject.toml -o requirements.txt; \
-    fi
-# Rewrite the locked index URL to the mirror
-RUN sed -i "s|https://pypi.org/simple|${PIP_INDEX_URL}|g" requirements.txt && \
-    uv pip install --system --no-cache -r requirements.txt
+COPY docker/requirements.lock requirements.txt
+RUN uv pip install --system --no-cache --index-url "${PIP_INDEX_URL}" -r requirements.txt
 
 # --- Stage 2: runtime ---
 FROM python:3.11-slim AS runtime

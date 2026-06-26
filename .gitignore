@@ -27,7 +27,8 @@ venv/
 env/
 ENV/
 
-# uv (uv.lock IS tracked for application reproducibility)
+# uv
+uv.lock
 
 # Tool caches
 .mypy_cache/
