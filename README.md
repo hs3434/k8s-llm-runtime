@@ -39,7 +39,7 @@ docker save k8s-llm-runtime/router:0.1.0 \
 # 3. 部署 Router（kind config 已预置 k8s-llm-runtime/router=true label）
 KUBECONFIG=./kubeconfig helm upgrade --install llm-router ./charts/llm-router \
   --namespace llm-system --create-namespace --wait \
-  --set nodeSelector.k8s-llm-runtime/router=true
+  --set-string nodeSelector.k8s-llm-runtime/router=true
 
 # 4. Port-forward
 KUBECONFIG=./kubeconfig kubectl -n llm-system port-forward svc/llm-router 18080:8080 &

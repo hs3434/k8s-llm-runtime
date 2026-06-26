@@ -169,7 +169,7 @@ KUBECONFIG=./kubeconfig helm upgrade --install llm-router ./charts/llm-router \
   --namespace llm-system \
   --create-namespace \
   --wait \
-  --set nodeSelector.k8s-llm-runtime/router=true
+  --set-string nodeSelector.k8s-llm-runtime/router=true
 ```
 
 NVIDIA GPU 环境：
@@ -179,7 +179,7 @@ KUBECONFIG=./kubeconfig helm upgrade --install llm-router ./charts/llm-router \
   --namespace llm-system \
   --create-namespace \
   --wait \
-  --set nodeSelector.k8s-llm-runtime/router=true \
+  --set-string nodeSelector.k8s-llm-runtime/router=true \
   --set models.defaultGpu.vendor=nvidia \
   --set models.defaultGpu.limit=1
 ```
@@ -191,7 +191,7 @@ KUBECONFIG=./kubeconfig helm upgrade --install llm-router ./charts/llm-router \
   --namespace llm-system \
   --create-namespace \
   --wait \
-  --set nodeSelector.k8s-llm-runtime/router=true \
+  --set-string nodeSelector.k8s-llm-runtime/router=true \
   --set models.defaultGpu.vendor=amd \
   --set models.defaultGpu.limit=1
 ```
@@ -290,7 +290,7 @@ KUBECONFIG=./kubeconfig helm upgrade --install llm-router ./charts/llm-router \
   --namespace llm-system \
   --create-namespace \
   --wait \
-  --set nodeSelector.k8s-llm-runtime/router=true \
+  --set-string nodeSelector.k8s-llm-runtime/router=true \
   --set models.defaultGpu.vendor=nvidia \
   --set models.defaultGpu.limit=1 \
   --set-string 'vllmHelmExtraArgs=--set model.hfCachePath=/work/run/projects/bio-24/k8s-llm-runtime/cache/Qwen2.5-0.5B-Instruct'
