@@ -2,7 +2,7 @@
 
 > 基于 Kubernetes 的 vLLM 模型服务网关（Model Serving Router）
 
-从 [ai-flow](https://github.com/example/ai-flow) 抽出 K8s 执行能力，构建独立的 Python 库 + Helm chart 工具集，对外提供 OpenAI 兼容的推理 API，内部按需调度 K8s 部署模型。
+`k8s-llm-runtime` 是一个 Python 库 + Helm chart 工具集，用于在 Kubernetes 上部署、调度和访问 vLLM 模型服务。Router 服务对外提供 OpenAI 兼容的推理 API，对内按需调度 Kubernetes 部署模型。
 
 ## 核心特性
 
@@ -10,30 +10,53 @@
 - **按需部署**：首次请求某模型 → 自动 helm install；闲置超时 → 自动 undeploy
 - **多模型并存**：同时跑 Qwen / Llama / Mistral，靠 alias 路由
 - **GPU 灵活**：CPU / AMD ROCm / NVIDIA 三种模式，values.yaml 切换
-- **生产级**：Helm chart + RBAC 最小权限 + Prometheus 指标 + 分布式锁
+- **Kubernetes 原生**：Helm chart + RBAC 最小权限 + Prometheus 指标 + Lease 分布式锁
 
-## 快速开始
+## 架构概览
+
+```text
+Client
+  -> LLM Router (FastAPI / Pod)
+    -> Lease lock + Helm install
+      -> vLLM Inference Pod
+        -> NVIDIA / AMD GPU
+```
+
+详细说明参见 [`docs/architecture.md`](docs/architecture.md)。
+
+## 快速开始（本地 kind 集群）
 
 ```bash
-# 1. 起本地 K8s 集群（默认 kind）
-make cluster-up
+# 1. 起本地 K8s 集群
+make cluster-up CLUSTER=kind
 
-# 2. 部署 Router
-helm install llm-router ./charts/llm-router -n llm-system --create-namespace --wait
+# 2. 构建并导入 Router 镜像（镜像内已自带 charts/llm-inference）
+docker build -f docker/Dockerfile.router -t k8s-llm-runtime/router:0.1.0 .
+docker save k8s-llm-runtime/router:0.1.0 \
+  | docker exec -i k8s-llm-demo-kind-worker2 \
+      ctr -n k8s.io images import --snapshotter=overlayfs -
 
-# 3. 端口转发
-kubectl -n llm-system port-forward svc/llm-router 8080:8080 &
+# 3. 部署 Router（kind config 已预置 k8s-llm-runtime/router=true label）
+KUBECONFIG=./kubeconfig helm upgrade --install llm-router ./charts/llm-router \
+  --namespace llm-system --create-namespace --wait \
+  --set nodeSelector.k8s-llm-runtime/router=true
 
-# 4. 调推理（首次会自动部署模型）
-python examples/vllm_qwen/client.py --prompt "Hello"
+# 4. Port-forward
+KUBECONFIG=./kubeconfig kubectl -n llm-system port-forward svc/llm-router 18080:8080 &
+
+# 5. 调推理（首次会自动部署模型）
+python examples/vllm_qwen/client.py \
+  --base-url http://127.0.0.1:18080/v1 \
+  --model qwen-0.5b \
+  --prompt "Hello"
 ```
+
+GPU 推理需要额外把 `vllm/vllm-openai:latest` 导入 GPU worker；CPU-only demo 可使用 `docker/mock-vllm/values-mock.yaml`。完整步骤见 [`docs/usage.md`](docs/usage.md)。
 
 ## 文档
 
 - [架构设计](docs/architecture.md)
-- [AMD 面试 demo 步骤](docs/amd-interview-demo.md)
-- [设计稿](../learning-journey/docs/superpowers/specs/2026-06-24-k8s-llm-runtime-design.md)
-- [实施计划](../learning-journey/docs/superpowers/plans/)
+- [本地部署与使用](docs/usage.md)
 
 ## 安装依赖
 
@@ -50,29 +73,39 @@ make format            # ruff format
 make type-check        # mypy --strict
 make cluster-up        # 起 kind 集群
 make cluster-down      # 停 kind 集群
-make demo              # 部署 demo
 make test-integration  # 跑 kind e2e
+make lock-runtime      # 更新 docker/requirements.lock
 ```
 
-## Python 库 API（3 层）
+## Python 库结构
 
 ```python
 from k8s_llm_runtime import (
-    # Low level: K8s Jobs
+    # Kubernetes Job
     K8sJobOperator, JobSpec, ContainerSpec, GPUResource, GPUVendor,
 
-    # Mid level: Helm deploy vLLM
+    # Helm-based vLLM deploy
     VLLMInferenceOperator, VLLMDeployment,
 
-    # High level: Model serving router
+    # Model routing
     ModelOperator, K8sLeaseLock,
     ChatMessage, ChatRequest, ChatResponse,
 )
 ```
 
-## 项目状态
+## 项目布局
 
-🚧 v1.0 完成 — 仓库骨架完整，所有 Phase 已提交。
+```text
+src/k8s_llm_runtime/         # Python 核心库
+charts/llm-router/            # Router Helm chart
+charts/llm-inference/         # vLLM 模型服务 Helm chart（被 Router 动态部署）
+docker/                       # Router 镜像构建
+docker/mock-vllm/             # CPU-only 测试用 mock vLLM
+examples/vllm_qwen/           # 示例客户端
+scripts/cluster/              # 本地 kind/minikube 集群启动脚本
+docs/                         # 架构与使用文档
+tests/                        # 单元测试 + chart 渲染测试 + 集成测试
+```
 
 ## 许可证
 
