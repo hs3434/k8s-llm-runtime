@@ -44,6 +44,8 @@ nodes:
         containerPath: ${HF_CACHE_HOST_DIR}
         readOnly: true
   - role: worker
+    labels:
+      k8s-llm-runtime/router: "true"
 containerdConfigPatches:
   - |-
     [plugins."io.containerd.grpc.v1.cri"]

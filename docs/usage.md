@@ -108,16 +108,9 @@ KUBECONFIG=./kubeconfig kubectl describe node | grep -A5 nvidia.com/gpu
 docker build -f docker/Dockerfile.router -t k8s-llm-runtime/router:0.1.0 .
 ```
 
-由于 Router 是手动部署的，我们把 Router 固定到一个普通 worker 节点（例如 `worker2`），从而避免把镜像导入所有节点。
+由于 Router 是手动部署的，我们把 Router 固定到一个普通 worker 节点，从而避免把镜像导入所有节点。`scripts/cluster/kind-config*.yaml` 已经在该 worker 上预置 label `k8s-llm-runtime/router=true`，所以 `make cluster-up` 之后无需再手动 `kubectl label`。
 
-给目标 worker 打 label：
-
-```bash
-KUBECONFIG=./kubeconfig kubectl label node k8s-llm-demo-kind-worker2 \
-  k8s-llm-runtime/router=true --overwrite
-```
-
-在 rootless Docker、containerd v2、或镜像 manifest 兼容性不佳的环境里，`kind load docker-image` 可能失败，常见表现是镜像导入报错或节点 containerd 中看不到镜像。为了避免这类问题，推荐直接用 `docker save | ctr import` 把 Router 镜像只导入目标 worker：
+在 rootless Docker、containerd v2、或镜像 manifest 兼容性不佳的环境里，`kind load docker-image` 可能失败，常见表现是镜像导入报错或节点 containerd 中看不到镜像。为了避免这类问题，推荐直接用 `docker save | ctr import` 把 Router 镜像只导入 Router worker（创建时会被 kind 命名为 `k8s-llm-demo-kind-worker2`）：
 
 ```bash
 docker save k8s-llm-runtime/router:0.1.0 \
