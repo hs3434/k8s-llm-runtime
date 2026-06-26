@@ -267,6 +267,32 @@ vLLM Helm 部署操作封装。
 
 它是 Python Router 逻辑和 `charts/llm-inference` Helm chart 之间的桥梁。
 
+### `src/k8s_llm_runtime/server.py`
+
+通用 FastAPI Router 服务入口。
+
+这个文件是 Router 镜像的实际启动模块。`docker/Dockerfile.router` 使用下面的 Uvicorn app path 启动它：
+
+```bash
+uvicorn k8s_llm_runtime.server:app --host 0.0.0.0 --port 8080 --workers 2
+```
+
+它负责：
+
+- 加载 `MODEL_CONFIG_PATH` 指向的模型别名配置
+- 初始化 `ModelOperator`
+- 初始化 `VLLMInferenceOperator`
+- 注册 Prometheus `/metrics`
+- 暴露 Router HTTP API
+
+它暴露的主要接口：
+
+- `/healthz`
+- `/readyz`
+- `/metrics`
+- `/v1/models`
+- `/v1/chat/completions`
+
 ### `src/k8s_llm_runtime/model.py`
 
 模型路由核心逻辑。
@@ -288,7 +314,11 @@ vLLM Helm 部署操作封装。
 
 ## 3. Router 示例应用：`examples/vllm_qwen/`
 
-这个目录既是示例，也是 Router 镜像的实际应用入口。
+这个目录只保留 Qwen 示例客户端、benchmark 和请求样例。Router 服务端入口已经移动到通用模块：
+
+```text
+src/k8s_llm_runtime/server.py
+```
 
 ### `examples/__init__.py`
 
@@ -297,30 +327,6 @@ Python 包标记文件。
 ### `examples/vllm_qwen/__init__.py`
 
 Qwen 示例包标记文件。
-
-### `examples/vllm_qwen/server.py`
-
-FastAPI Router server。
-
-`docker/Dockerfile.router` 会把它复制成：
-
-```text
-/app/server.py
-```
-
-然后用 Uvicorn 启动：
-
-```bash
-uvicorn server:app --host 0.0.0.0 --port 8080 --workers 2
-```
-
-它暴露：
-
-- `/healthz`
-- `/readyz`
-- `/metrics`
-- `/v1/models`
-- `/v1/chat/completions`
 
 ### `examples/vllm_qwen/client.py`
 
@@ -646,7 +652,7 @@ docker/requirements.lock
 最终启动命令：
 
 ```bash
-uvicorn server:app --host 0.0.0.0 --port 8080 --workers 2
+uvicorn k8s_llm_runtime.server:app --host 0.0.0.0 --port 8080 --workers 2
 ```
 
 ### `docker/requirements.lock`

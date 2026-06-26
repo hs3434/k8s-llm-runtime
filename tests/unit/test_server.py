@@ -32,13 +32,13 @@ def mock_op():
 def client(mock_op):
     with (
         patch(
-            "examples.vllm_qwen.server.load_model_aliases",
+            "k8s_llm_runtime.server.load_model_aliases",
             return_value={"qwen-0.5b": "Qwen/Qwen2.5-0.5B-Instruct"},
         ),
         patch("k8s_llm_runtime.ModelOperator") as mock_cls,
     ):
         mock_cls.return_value = mock_op
-        import examples.vllm_qwen.server as srv
+        import k8s_llm_runtime.server as srv
 
         importlib.reload(srv)
         srv.app.state.op = mock_op

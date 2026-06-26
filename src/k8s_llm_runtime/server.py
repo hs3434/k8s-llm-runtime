@@ -1,18 +1,17 @@
-"""FastAPI LLM Router.
+"""FastAPI LLM Router server."""
 
-OpenAI-compatible chat completion API. Auto-deploys vLLM models on demand
-via the ModelOperator.
-"""
 from __future__ import annotations
 
 import os
+from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Any, cast
 from uuid import uuid4
 
 import structlog
 import yaml
-from fastapi import FastAPI, HTTPException, Request, status
+from fastapi import FastAPI, HTTPException, Request, Response, status
 from fastapi.responses import JSONResponse
 from prometheus_client import make_asgi_app
 
@@ -44,14 +43,14 @@ def load_model_aliases(path: Path) -> dict[str, str]:
         return {}
     with path.open() as f:
         cfg = yaml.safe_load(f) or {}
-    aliases = cfg.get("aliases", {})
+    aliases = cast(dict[str, str], cfg.get("aliases", {}))
     if not aliases:
         raise ModelAliasError(f"No aliases found in {path}")
     return aliases
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     cfg_path = Path(os.environ.get("MODEL_CONFIG_PATH", "/app/config/models.yaml"))
     aliases = load_model_aliases(cfg_path)
 
@@ -63,9 +62,6 @@ async def lifespan(app: FastAPI):
         vllm_op=vllm_op,
         namespace=os.environ.get("TARGET_NAMESPACE", "llm-models"),
         default_gpu=GPUResource(
-            # Default to `none` so the example runs on plain kind/MiniKube
-            # without GPU hardware. Set GPU_VENDOR=amd for the AMD ROCm
-            # demo, =nvidia for CUDA, etc.
             vendor=GPUVendor(os.environ.get("GPU_VENDOR", "none")),
             limit=int(os.environ.get("GPU_LIMIT", "1")),
         ),
@@ -92,7 +88,10 @@ app.mount("/metrics", make_asgi_app())
 
 
 @app.middleware("http")
-async def add_request_id(request: Request, call_next):
+async def add_request_id(
+    request: Request,
+    call_next: Callable[[Request], Awaitable[Response]],
+) -> Response:
     rid = request.headers.get("X-Request-ID", str(uuid4()))
     structlog.contextvars.bind_contextvars(request_id=rid)
     response = await call_next(request)
@@ -112,7 +111,7 @@ ERROR_MAP: dict[type, tuple[int, str]] = {
 
 
 @app.exception_handler(K8sLLMRuntimeError)
-async def handle_lib_error(request: Request, exc: K8sLLMRuntimeError):
+async def handle_lib_error(request: Request, exc: K8sLLMRuntimeError) -> JSONResponse:
     status_code, msg = ERROR_MAP.get(type(exc), (500, "Internal error"))
     logger.error("lib_error", error_type=type(exc).__name__, message=str(exc))
     return JSONResponse(
@@ -122,19 +121,20 @@ async def handle_lib_error(request: Request, exc: K8sLLMRuntimeError):
 
 
 @app.get("/")
-async def root():
+async def root() -> dict[str, str]:
     return {"message": "LLM Router", "version": "0.1.0"}
 
 
 @app.get("/healthz")
-async def healthz():
+async def healthz() -> dict[str, str]:
     return {"status": "healthy"}
 
 
 @app.get("/readyz")
-async def readyz():
+async def readyz() -> dict[str, str]:
     try:
         from k8s_llm_runtime import _client
+
         _client.core_api().list_namespace(limit=1)
     except Exception as exc:
         raise HTTPException(503, f"K8s API unreachable: {exc}") from exc
@@ -142,24 +142,21 @@ async def readyz():
 
 
 @app.post("/v1/chat/completions")
-async def chat_completions(req: ChatRequest):
+async def chat_completions(req: ChatRequest) -> Any:
     return await app.state.op.chat(req)
 
 
 @app.get("/v1/models")
-async def list_models():
+async def list_models() -> dict[str, object]:
     aliases = await app.state.op.list_models()
     return {
         "object": "list",
-        "data": [
-            {"id": a, "object": "model", "owned_by": "k8s-llm-runtime"}
-            for a in aliases
-        ],
+        "data": [{"id": a, "object": "model", "owned_by": "k8s-llm-runtime"} for a in aliases],
     }
 
 
 @app.get("/v1/models/{alias}")
-async def get_model(alias: str):
+async def get_model(alias: str) -> dict[str, str]:
     aliases = await app.state.op.list_models()
     if alias not in aliases:
         raise HTTPException(404, f"Model {alias} not loaded")
@@ -167,6 +164,6 @@ async def get_model(alias: str):
 
 
 @app.delete("/v1/models/{alias}", status_code=status.HTTP_204_NO_CONTENT)
-async def unload_model(alias: str):
+async def unload_model(alias: str) -> None:
     await app.state.op.unload(alias)
     return None

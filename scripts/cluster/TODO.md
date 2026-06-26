@@ -156,7 +156,7 @@ parses and discards `--model` / `--port` args that the chart passes.
   `none` (was `amd`) so the chart deploys on any cluster. AMD ROCm
   is the AMD-interview target; flip via
   `--set models.defaultGpu.vendor=amd`.
-- `examples/vllm_qwen/server.py` — `GPU_VENDOR` env default is
+- `src/k8s_llm_runtime/server.py` — `GPU_VENDOR` env default is
   `none` (was `amd`). Same override applies.
 - `charts/llm-inference/values.yaml` — resources lowered from
   8Gi/16Gi to 2Gi/4Gi so the vLLM pod fits on kind workers. Real
