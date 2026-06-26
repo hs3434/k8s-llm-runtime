@@ -51,3 +51,4 @@ serviceMonitor:
   enabled: false
 
 podAnnotations: {}
+nodeSelector: {}

@@ -21,6 +21,10 @@ spec:
       {{- end }}
     spec:
       serviceAccountName: {{ include "llm-router.fullname" . }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
         - name: router
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"

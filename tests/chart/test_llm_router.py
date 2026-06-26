@@ -61,3 +61,12 @@ def test_vllm_extra_args_do_not_require_missing_configmap(helm_template):
         set_values=["vllmHelmExtraArgs=--set nodeSelector.foo=bar"],
     )
     assert "llm-router-vllm-extra" not in manifest
+
+
+def test_node_selector_propagates(helm_template):
+    manifest = helm_template(
+        chart="router",
+        set_values=["nodeSelector.k8s-llm-runtime/router=true"],
+    )
+    assert "nodeSelector:" in manifest
+    assert "k8s-llm-runtime/router: true" in manifest

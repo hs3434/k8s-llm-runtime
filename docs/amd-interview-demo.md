@@ -42,18 +42,27 @@ cd /work/run/projects/bio-24/my_projects/k8s-llm-runtime
 make cluster-up CLUSTER=kind
 # (wait ~30s for kind to come up)
 
-# Build & load Router image into kind
-docker build -f docker/Dockerfile.router -t router:demo .
-kind load docker-image router:demo --name k8s-llm-demo-kind
+# Build Router image
+docker build -f docker/Dockerfile.router -t k8s-llm-runtime/router:0.1.0 .
+
+# Pin Router to a plain worker (worker2) so we only need the Router
+# image there. Use docker save | ctr import — `kind load docker-image`
+# can fail under rootless Docker / containerd v2.
+KUBECONFIG=./kubeconfig kubectl label node k8s-llm-demo-kind-worker2 \
+    k8s-llm-runtime/router=true --overwrite
+docker save k8s-llm-runtime/router:0.1.0 \
+    | docker exec -i k8s-llm-demo-kind-worker2 \
+        ctr -n k8s.io images import --snapshotter=overlayfs -
 
 # Pack llm-inference chart into a ConfigMap
 kubectl create configmap llm-router-chart-source \
     --from-file=charts/llm-inference/ \
     --namespace=llm-system --dry-run=client -o yaml | kubectl apply -f -
 
-# Install llm-router chart
+# Install llm-router chart (pinned to worker2)
 helm install llm-router ./charts/llm-router \
-    --namespace llm-system --create-namespace --wait
+    --namespace llm-system --create-namespace --wait \
+    --set nodeSelector.k8s-llm-runtime/router=true
 
 # Wait for ready
 kubectl wait --namespace llm-system \
