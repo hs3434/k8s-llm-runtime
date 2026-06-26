@@ -36,24 +36,8 @@ def kind_cluster():
 @pytest.fixture(scope="session")
 def router_port_forward(kind_cluster, kubeconfig):
     """Install llm-router chart + port-forward to localhost."""
-    # Pre-create chart-source ConfigMap by packing llm-inference chart
-    # (read by llm-router Deployment's initContainer)
-    subprocess.run(
-        [
-            "kubectl",
-            "create",
-            "configmap",
-            "llm-router-chart-source",
-            "--from-file=charts/llm-inference/",
-            "--namespace",
-            "llm-system",
-            "--kubeconfig",
-            kubeconfig,
-        ],
-        cwd=REPO_ROOT,
-        check=True,
-        env={**os.environ, "KUBECONFIG": kubeconfig},
-    )
+    # Router image bundles charts/llm-inference at /app/charts/llm-inference,
+    # so no manual ConfigMap is needed.
 
     # Install llm-router chart
     subprocess.run(

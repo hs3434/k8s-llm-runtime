@@ -56,9 +56,6 @@ spec:
             - name: model-config
               mountPath: /app/config
               readOnly: true
-            - name: chart-bundle
-              mountPath: /app/charts
-              readOnly: true
           resources:
             requests:
               cpu: {{ .Values.resources.requests.cpu | quote }}
@@ -78,29 +75,7 @@ spec:
               port: http
             initialDelaySeconds: 5
             periodSeconds: 5
-      initContainers:
-        - name: load-chart
-          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
-          command:
-            - sh
-            - -c
-            - |
-              mkdir -p /app/charts/llm-inference && \
-              tar -xzf /chart-source/chart --strip-components=1 \
-                -C /app/charts/llm-inference && \
-              ls /app/charts/llm-inference/
-          volumeMounts:
-            - name: chart-source
-              mountPath: /chart-source
-              readOnly: true
-            - name: chart-bundle
-              mountPath: /app/charts
       volumes:
         - name: model-config
           configMap:
             name: {{ include "llm-router.fullname" . }}-models
-        - name: chart-source
-          configMap:
-            name: {{ include "llm-router.chartSourceName" . }}
-        - name: chart-bundle
-          emptyDir: {}

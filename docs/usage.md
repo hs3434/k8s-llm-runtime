@@ -156,33 +156,9 @@ docker exec k8s-llm-demo-kind-worker \
 
 如果只是跑 CPU-only mock demo，可以跳过这一步，改用 `docker/mock-vllm` 镜像和 `docker/mock-vllm/values-mock.yaml`。
 
-### 3.4 准备 `llm-inference` chart-source ConfigMap
+Router 镜像已经内置 `charts/llm-inference` 到 `/app/charts/llm-inference`，不需要再手动打包 chart 或创建 ConfigMap。
 
-Router 动态部署 vLLM 时，需要在容器内访问 `charts/llm-inference`。
-
-先把 chart 打包：
-
-```bash
-helm package charts/llm-inference -d /tmp
-```
-
-再放入 ConfigMap：
-
-```bash
-KUBECONFIG=./kubeconfig kubectl create namespace llm-system --dry-run=client -o yaml | KUBECONFIG=./kubeconfig kubectl apply -f -
-
-KUBECONFIG=./kubeconfig kubectl -n llm-system create configmap llm-router-chart-source \
-  --from-file=chart=/tmp/llm-inference-0.1.0.tgz \
-  --dry-run=client -o yaml | KUBECONFIG=./kubeconfig kubectl apply -f -
-```
-
-Router Pod 的 initContainer 会解压这个 chart 到：
-
-```text
-/app/charts/llm-inference
-```
-
-### 3.5 安装 Router
+### 3.4 安装 Router
 
 所有环境都建议用 nodeSelector 把 Router 固定到 `worker2`，避免 Router Pod 漂到其它节点后因为镜像缺失而启动失败。
 
@@ -227,7 +203,7 @@ KUBECONFIG=./kubeconfig kubectl -n llm-system get pods -o wide
 KUBECONFIG=./kubeconfig kubectl -n llm-system logs deployment/llm-router --tail=50
 ```
 
-### 3.6 Port-forward Router
+### 3.5 Port-forward Router
 
 ```bash
 KUBECONFIG=./kubeconfig kubectl -n llm-system port-forward svc/llm-router 18080:8080
@@ -249,7 +225,7 @@ curl http://127.0.0.1:18080/v1/models
 {"object":"list","data":[]}
 ```
 
-### 3.7 触发模型部署
+### 3.6 触发模型部署
 
 ```bash
 python examples/vllm_qwen/client.py \
@@ -278,7 +254,7 @@ KUBECONFIG=./kubeconfig kubectl get all -n llm-models
 
 第二次请求会复用已经部署的 vLLM 服务，延迟会明显降低。
 
-### 3.8 卸载模型
+### 3.7 卸载模型
 
 ```bash
 curl -X DELETE http://127.0.0.1:18080/v1/models/qwen-0.5b

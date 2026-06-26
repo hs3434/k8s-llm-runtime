@@ -70,3 +70,10 @@ def test_node_selector_propagates(helm_template):
     )
     assert "nodeSelector:" in manifest
     assert "k8s-llm-runtime/router: true" in manifest
+
+
+def test_chart_source_configmap_not_referenced(helm_template):
+    """Router reads llm-inference chart from image, not a ConfigMap."""
+    manifest = helm_template(chart="router")
+    assert "chart-source" not in manifest
+    assert "load-chart" not in manifest

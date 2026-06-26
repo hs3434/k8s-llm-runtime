@@ -36,7 +36,7 @@ RUN if [ -n "${APT_MIRROR}" ]; then \
 
 # App code
 WORKDIR /app
-COPY charts/ /chart-source/
+COPY charts/llm-inference/ /app/charts/llm-inference/
 COPY src/k8s_llm_runtime/ /app/src/k8s_llm_runtime/
 
 # Python deps from builder
